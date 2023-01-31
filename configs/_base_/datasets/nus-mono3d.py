@@ -1,5 +1,9 @@
-dataset_type = 'NuScenesMonoDataset'
-data_root = 'data/nuscenes/'
+# dataset_type = 'NuScenesMonoDataset'
+dataset_type = 'NuScenesMonoDataset_copy'
+# data_root = 'data/nuscenes/'
+data_root = '/content/drive/MyDrive/Colab Notebooks/Thesis/'
+# data_root = '/content/notebooks/Thesis/'
+# data_root = '/content/'
 class_names = [
     'car', 'truck', 'trailer', 'bus', 'construction_vehicle', 'bicycle',
     'motorcycle', 'pedestrian', 'traffic_cone', 'barrier'
@@ -65,12 +69,15 @@ eval_pipeline = [
 ]
 
 data = dict(
-    samples_per_gpu=2,
+    samples_per_gpu=4,
     workers_per_gpu=2,
+    # samples_per_gpu=1,
+    # workers_per_gpu=1,
     train=dict(
         type=dataset_type,
         data_root=data_root,
-        ann_file=data_root + 'nuscenes_infos_train_mono3d.coco.json',
+        # ann_file=data_root + 'nuscenes_infos_train_mono3d.coco.json',
+        ann_file=data_root + 'nuscenes_infos_val_mono3d.coco.json',
         img_prefix=data_root,
         classes=class_names,
         pipeline=train_pipeline,

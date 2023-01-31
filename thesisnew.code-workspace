@@ -1,0 +1,28 @@
+// {
+// 	"folders": [
+// 		{
+// 			"path": "G:\\My Drive\\Colab Notebooks\\Thesis\\mmdetection3d"
+// 		}
+// 	],
+// 	"settings": {}
+// }
+
+
+{
+	"folders": [
+		{
+			"path": "G:\\My Drive\\Colab Notebooks\\Thesis\\mmdetection3d"
+		},
+		{
+			"path": "..\\nuscenes-devkit"
+		}
+	],
+	"settings": {
+		"python.defaultInterpreterPath":"C:\\Users\\Oindr\\.conda\\envs\\openmmlab\\python.exe",
+		"python.terminal.activateEnvironment": true,
+		// "terminal.integrated.shell.windows": "C:\\Windows\\System32\\cmd.exe",
+
+	}	
+
+}
+

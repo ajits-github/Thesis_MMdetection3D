@@ -91,6 +91,7 @@ class LoadImageFromFileMono3D(LoadImageFromFile):
         Returns:
             dict: The dict contains loaded image and meta information.
         """
+        # print("............................LoadImageFromFileMono3D....................results...", results)
         super().__call__(results)
         results['cam2img'] = results['img_info']['cam_intrinsic']
         return results
@@ -517,6 +518,7 @@ class LoadAnnotations3D(LoadAnnotations):
                  with_mask=False,
                  with_seg=False,
                  with_bbox_depth=False,
+                 with_relative=True, # New ##
                  poly2mask=True,
                  seg_3d_dtype=np.int64,
                  file_client_args=dict(backend='disk')):
@@ -527,6 +529,7 @@ class LoadAnnotations3D(LoadAnnotations):
             with_seg,
             poly2mask,
             file_client_args=file_client_args)
+        print("......................Inside LoadAnnotations3D......copy............")
         self.with_bbox_3d = with_bbox_3d
         self.with_bbox_depth = with_bbox_depth
         self.with_label_3d = with_label_3d
@@ -534,6 +537,8 @@ class LoadAnnotations3D(LoadAnnotations):
         self.with_mask_3d = with_mask_3d
         self.with_seg_3d = with_seg_3d
         self.seg_3d_dtype = seg_3d_dtype
+        self.with_relative = with_relative  # New ##
+
 
     def _load_bboxes_3d(self, results):
         """Private function to load 3D bounding box annotations.
@@ -637,6 +642,26 @@ class LoadAnnotations3D(LoadAnnotations):
         results['pts_seg_fields'].append('pts_semantic_mask')
         return results
 
+    # New
+    def _load_relative_values(self, results):
+        """Private function to load relative parameters of the annotations.
+
+        Args:
+            results (dict): Result dict from :obj:`mmdet3d.CustomDataset`.
+
+        Returns:
+            dict: The dict containing loaded relative parameters.
+        """
+        results['velo_global3d'] = results['ann_info']['velo_global3d']
+        results['relative_velo_global3d'] = results['ann_info']['relative_velo_global3d']
+        results['depth_global3d'] = results['ann_info']['depth_global3d']
+        results['relative_velo'] = results['ann_info']['relative_velo']
+        results['ego_obj_distance'] = results['ann_info']['ego_obj_distance']
+        results['time_to_coll'] = results['ann_info']['time_to_coll']
+        # print(".........results....loading.py..._load_relative_values....\n\n\n\n ??????????????????????????????  \n", results)
+        return results
+    ## New
+
     def __call__(self, results):
         """Call function to load multiple types annotations.
 
@@ -664,7 +689,11 @@ class LoadAnnotations3D(LoadAnnotations):
             results = self._load_masks_3d(results)
         if self.with_seg_3d:
             results = self._load_semantic_seg_3d(results)
+        if self.with_relative: # New ##
+            results = self._load_relative_values(results)
 
+        # print("...............__call__.......results in loading.py.....LoadAnnotations3D..................", results)
+        # exit()
         return results
 
     def __repr__(self):

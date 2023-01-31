@@ -17,7 +17,7 @@ from ..core.bbox import CameraInstance3DBoxes, get_box_type
 from .builder import DATASETS
 from .pipelines import Compose
 from .utils import extract_result_dict, get_loading_pipeline
-
+import inspect
 
 @DATASETS.register_module()
 class NuScenesMonoDataset(CocoDataset):
@@ -85,7 +85,8 @@ class NuScenesMonoDataset(CocoDataset):
                  box_type_3d='Camera',
                  eval_version='detection_cvpr_2019',
                  use_valid_flag=False,
-                 version='v1.0-trainval',
+                #  version='v1.0-trainval',
+                 version='v1.0-mini',
                  classes=None,
                  img_prefix='',
                  seg_prefix=None,
@@ -93,6 +94,7 @@ class NuScenesMonoDataset(CocoDataset):
                  test_mode=False,
                  filter_empty_gt=True,
                  file_client_args=dict(backend='disk')):
+        print("..............This is the datatset file...nuscenes_mono_dataset.py..........")
         self.ann_file = ann_file
         self.data_root = data_root
         self.img_prefix = img_prefix
@@ -106,6 +108,9 @@ class NuScenesMonoDataset(CocoDataset):
         # load annotations (and proposals)
         with self.file_client.get_local_path(self.ann_file) as local_path:
             self.data_infos = self.load_annotations(local_path)
+            # print(".......................data_infos.keys().....................", self.data_infos.keys())
+            # print(".......................data_infos......................", self.data_infos)
+            # exit()
 
         if self.proposal_file is not None:
             with self.file_client.get_local_path(
@@ -161,6 +166,11 @@ class NuScenesMonoDataset(CocoDataset):
                 - box_type_3d (str): 3D box type.
                 - box_mode_3d (str): 3D box mode.
         """
+        # print(".............results..............", results)
+        curframe = inspect.currentframe()
+        calframe = inspect.getouterframes(curframe, 2)
+        # print('...........caller name for pre_pipeline..............:', calframe[1][3])
+
         results['img_prefix'] = self.img_prefix
         results['seg_prefix'] = self.seg_prefix
         results['proposal_file'] = self.proposal_file
@@ -186,6 +196,11 @@ class NuScenesMonoDataset(CocoDataset):
                 gt_bboxes_3d, gt_labels_3d, attr_labels, centers2d,
                 depths, bboxes_ignore, masks, seg_map
         """
+        
+        curframe = inspect.currentframe()
+        calframe = inspect.getouterframes(curframe, 2)
+        # print('...........caller name for _parse_ann_info..............:', calframe[1][3])
+
         gt_bboxes = []
         gt_labels = []
         attr_labels = []
@@ -194,7 +209,15 @@ class NuScenesMonoDataset(CocoDataset):
         gt_bboxes_cam3d = []
         centers2d = []
         depths = []
+        # New
+        # velo_global3d = []
+        # relative_velo_global3d = []
+        # depth_normalized =[]
+        # depth_global3d = []
+        ## New
+
         for i, ann in enumerate(ann_info):
+            # print(".....................ann.....nuscenes_mono_dataset.py.................\n", ann)
             if ann.get('ignore', False):
                 continue
             x1, y1, w, h = ann['bbox']
@@ -226,6 +249,14 @@ class NuScenesMonoDataset(CocoDataset):
                 depth = ann['center2d'][2]
                 centers2d.append(center2d)
                 depths.append(depth)
+                # New
+                # 3D annotations in global coordinates
+                # velo_global3d.append(ann['velo_global3d'])
+                # relative_velo_global3d.append(ann['relative_velo_global3d'])
+                # depth_normalized.append(ann['depth_normalized'])
+                # depth_global3d.append(ann['depth_global3d'])
+                ## New
+
 
         if gt_bboxes:
             gt_bboxes = np.array(gt_bboxes, dtype=np.float32)
@@ -240,11 +271,23 @@ class NuScenesMonoDataset(CocoDataset):
             gt_bboxes_cam3d = np.array(gt_bboxes_cam3d, dtype=np.float32)
             centers2d = np.array(centers2d, dtype=np.float32)
             depths = np.array(depths, dtype=np.float32)
+            # New
+            # velo_global3d = np.array(velo_global3d, dtype=np.float32)
+            # relative_velo_global3d = np.array(relative_velo_global3d, dtype=np.float32)
+            # depth_normalized = np.array(depth_normalized, dtype=np.float32)
+            # depth_global3d = np.array(depth_global3d, dtype=np.float32)
+            # ## New
         else:
             gt_bboxes_cam3d = np.zeros((0, self.bbox_code_size),
                                        dtype=np.float32)
             centers2d = np.zeros((0, 2), dtype=np.float32)
             depths = np.zeros((0), dtype=np.float32)
+            # New
+            # velo_global3d = np.zeros((0, 3), dtype=np.float32)
+            # relative_velo_global3d = np.zeros((0, 3), dtype=np.float32)
+            # depth_normalized = np.array([], dtype=np.float32)
+            # depth_global3d = np.zeros((0, 3), dtype=np.float32)
+            # ## New
 
         gt_bboxes_cam3d = CameraInstance3DBoxes(
             gt_bboxes_cam3d,
@@ -269,8 +312,15 @@ class NuScenesMonoDataset(CocoDataset):
             depths=depths,
             bboxes_ignore=gt_bboxes_ignore,
             masks=gt_masks_ann,
-            seg_map=seg_map)
-
+            seg_map=seg_map,
+            # # New
+            # velo_global3d=velo_global3d,
+            # relative_velo_global3d=relative_velo_global3d,
+            # depth_normalized=depth_normalized,
+            # depth_global3d=depth_global3d,
+            # ## New            
+            )
+        # print("..................Annotation Sample................",list(ann.items())[0])
         return ann
 
     def get_attr_name(self, attr_idx, label_name):
@@ -422,7 +472,9 @@ class NuScenesMonoDataset(CocoDataset):
         }
 
         mmcv.mkdir_or_exist(jsonfile_prefix)
-        res_path = osp.join(jsonfile_prefix, 'results_nusc.json')
+        # res_path = osp.join(jsonfile_prefix, 'results_nusc.json')
+        res_path = osp.join("/content", 'results_nusc.json')
+        # res_path = 
         print('Results writes to', res_path)
         mmcv.dump(nusc_submissions, res_path)
         return res_path
@@ -602,6 +654,7 @@ class NuScenesMonoDataset(CocoDataset):
         assert pipeline is not None, 'data loading pipeline is not provided'
         img_info = self.data_infos[index]
         input_dict = dict(img_info=img_info)
+        # print("..............pipeline...................",pipeline)
 
         if load_annos:
             ann_info = self.get_ann_info(index)

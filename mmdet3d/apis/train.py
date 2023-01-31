@@ -98,6 +98,9 @@ def train_segmentor(model,
             drop_last=True) for ds in dataset
     ]
 
+    print("data_loaders...........", data_loaders)
+    # exit()
+
     # put model on gpus
     if distributed:
         find_unused_parameters = cfg.get('find_unused_parameters', False)

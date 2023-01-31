@@ -24,7 +24,8 @@ train_pipeline = [
         with_bbox_3d=True,
         with_label_3d=True,
         with_bbox_depth=True),
-    dict(type='Resize', img_scale=(1600, 900), keep_ratio=True),
+    # dict(type='Resize', img_scale=(1600, 900), keep_ratio=True),
+    dict(type='Resize', img_scale=(16, 9), keep_ratio=True),
     dict(type='RandomFlip3D', flip_ratio_bev_horizontal=0.5),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
@@ -35,6 +36,16 @@ train_pipeline = [
             'img', 'gt_bboxes', 'gt_labels', 'attr_labels', 'gt_bboxes_3d',
             'gt_labels_3d', 'centers2d', 'depths'
         ]),
+        # keys=[
+        #     'img', 'gt_bboxes', 'gt_labels', 'attr_labels', 'gt_bboxes_3d',
+        #     'gt_labels_3d', 'centers2d', 'depths', 
+        #     'velo_global3d', 'relative_velo_global3d', 'depth_global3d', 
+        #     'relative_velo','ego_obj_distance', 'time_to_coll'
+        # ]),
+        # keys=[
+        #     'img', 'gt_bboxes', 'gt_labels', 'attr_labels', 'gt_bboxes_3d',
+        #     'gt_labels_3d', 'centers2d', 'depths', 'time_to_coll'
+        # ])   
 ]
 test_pipeline = [
     dict(type='LoadImageFromFileMono3D'),
@@ -56,6 +67,8 @@ test_pipeline = [
 data = dict(
     samples_per_gpu=2,
     workers_per_gpu=2,
+    # samples_per_gpu=1,
+    # workers_per_gpu=1,
     train=dict(pipeline=train_pipeline),
     val=dict(pipeline=test_pipeline),
     test=dict(pipeline=test_pipeline))
@@ -68,8 +81,18 @@ optimizer_config = dict(
 lr_config = dict(
     policy='step',
     warmup='linear',
-    warmup_iters=500,
+    # warmup_iters=500,
+    warmup_iters=100,
     warmup_ratio=1.0 / 3,
     step=[8, 11])
-total_epochs = 12
-evaluation = dict(interval=2)
+total_epochs = 10
+runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)
+evaluation = dict(interval=5)
+# checkpoint_config = dict(interval=1)
+# evaluation = dict(interval=total_epochs)
+# evaluation = dict(interval=10)
+checkpoint_config = dict(interval=total_epochs)
+load_from = 'work_dirs/fcos3d_nus/latest.pth'
+# load_from = 'work_dirs/fcos3d_r101_caffe_fpn_gn-head_dcn_2x8_1x_nus-mono3d/epoch_100.pth'
+# load_from = 'work_dirs/fcos3d_r101_caffe_fpn_gn-head_dcn_2x8_1x_nus-mono3d/epoch_2.pth'
+# workflow = [('val', 1)]

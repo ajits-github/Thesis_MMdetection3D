@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "..\\nuscenes-devkit"
+		},
+		{
+			"path": "..\\mmdetection"
+		}
+	],
+	"settings": {}
+}

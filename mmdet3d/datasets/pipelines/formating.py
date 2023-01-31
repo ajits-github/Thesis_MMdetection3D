@@ -39,6 +39,11 @@ class DefaultFormatBundle(object):
             dict: The result dict contains the data that is formatted with
                 default bundle.
         """
+        # print("\n>>>>>>>>>>>>>>>>.....results......in DefaultFormatBundle...........", results)
+        # exit()
+        # print("...............keys..............formatting.py", Collect3D.keys)
+        # exit()
+
         if 'img' in results:
             if isinstance(results['img'], list):
                 # process multiple imgs in single frame
@@ -53,6 +58,11 @@ class DefaultFormatBundle(object):
                 'gt_labels_3d', 'attr_labels', 'pts_instance_mask',
                 'pts_semantic_mask', 'centers2d', 'depths'
         ]:
+        # for key in [
+        #         'proposals', 'gt_bboxes', 'gt_bboxes_ignore', 'gt_labels',
+        #         'gt_labels_3d', 'attr_labels', 'pts_instance_mask',
+        #         'pts_semantic_mask', 'centers2d', 'depths', 'time_to_coll'
+        # ]:
             if key not in results:
                 continue
             if isinstance(results[key], list):
@@ -153,11 +163,18 @@ class Collect3D(object):
                 - keys in ``self.keys``
                 - ``img_metas``
         """
+        # print("\n>>>>>>>>>>>>>>>>.....results.keys()......in Collect3D...........", results.keys())
+        # print("\n>>>>>>>>>>>>>>>>.....results.........in Collect3D........", results)
         data = {}
         img_metas = {}
         for key in self.meta_keys:
             if key in results:
+                # print(".....key................in formatting.py", key)
                 img_metas[key] = results[key]
+
+        # print("\n..................img_metas..................", img_metas)
+        # print("\n..................keys.......in Collect3D..........", self.keys)
+        # exit()
 
         data['img_metas'] = DC(img_metas, cpu_only=True)
         for key in self.keys:
@@ -202,6 +219,7 @@ class DefaultFormatBundle3D(DefaultFormatBundle):
             dict: The result dict contains the data that is formatted with
                 default bundle.
         """
+        # print("......................results in formatting.DefaultFormatBundle3D..................", results)
         # Format 3D data
         if 'points' in results:
             assert isinstance(results['points'], BasePoints)
@@ -216,6 +234,8 @@ class DefaultFormatBundle3D(DefaultFormatBundle):
             # Clean GT bboxes in the final
             if 'gt_bboxes_3d_mask' in results:
                 gt_bboxes_3d_mask = results['gt_bboxes_3d_mask']
+                # print("...........gt_bboxes_3d_mask.........in formatting.py....DefaultFormatBundle3D.....",gt_bboxes_3d_mask)
+                # exit()
                 results['gt_bboxes_3d'] = results['gt_bboxes_3d'][
                     gt_bboxes_3d_mask]
                 if 'gt_names_3d' in results:
@@ -256,6 +276,8 @@ class DefaultFormatBundle3D(DefaultFormatBundle):
                     ],
                                                        dtype=np.int64)
         results = super(DefaultFormatBundle3D, self).__call__(results)
+        # print("......................results in formatting.py...DefaultFormatBundle3D..................\n\n\n ???????????????????? \n", results)
+        # exit()
         return results
 
     def __repr__(self):
