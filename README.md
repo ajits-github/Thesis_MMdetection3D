@@ -6,3 +6,4 @@
 * MMDetection3D is an open source object detection toolbox based on PyTorch, towards the next-generation platform for general 3D detection. It is a part of the OpenMMLab project developed by MMLab.
 * The architecture of the model has been altered by adding the convolution and relu layers for ttc (time to collision)
 * The loss function is implemented from the paper - "Binary TTC: A Temporal Geofence for Autonomous Navigation" called Motion in Depth(MiD) error
+* Architecture of the network includes- ResNet101 as backbone, Feature Pyramid Network(FPN) as neck and FCOSMono3D as head
