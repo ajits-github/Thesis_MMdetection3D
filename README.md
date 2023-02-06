@@ -1,3 +1,7 @@
+![first_anno_instance](https://user-images.githubusercontent.com/71327507/216976928-b73e8d76-3261-499f-9bb4-7c2cb003fa05.png)
+---------------------------------------------------------------------------------------------------------------------------------
+![car](https://user-images.githubusercontent.com/71327507/216977031-424a117f-1634-4cb1-a316-534c3da525cb.jpeg)
+
 ## Time-to-Collision Estimation for Objects in Autonomous Driving
 
 * The research aims to calculate the time for the ego vehicle to collide with the objects in the view
@@ -7,3 +11,6 @@
 * The architecture of the model has been altered by adding the convolution and relu layers for ttc (time to collision)
 * The loss function is implemented from the paper - "Binary TTC: A Temporal Geofence for Autonomous Navigation" called Motion in Depth(MiD) error
 * Architecture of the network includes- ResNet101 as backbone, Feature Pyramid Network(FPN) as neck and FCOSMono3D as head
+* Below is the nuScenes dataset distribution
+
+![nuscenes_distribution1](https://user-images.githubusercontent.com/71327507/216977188-3bf35045-19b2-4166-a8b1-f63a9917a56c.png)
