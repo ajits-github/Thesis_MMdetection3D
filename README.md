@@ -13,14 +13,14 @@
 * Architecture of the network includes- ResNet101 as backbone, Feature Pyramid Network(FPN) as neck and FCOSMono3D as head
 * Below is the nuScenes dataset meta information  
 ---------------------------------------------------------------------------------------------------------------------------------
-### The ego vehilce used for preparation of nuScenes dataset along with all the sensors
+#### The ego vehilce used for preparation of nuScenes dataset along with all the sensors.
 ![car](https://user-images.githubusercontent.com/71327507/216977031-424a117f-1634-4cb1-a316-534c3da525cb.jpeg)
 
 ---------------------------------------------------------------------------------------------------------------------------------
-### An image sample with all the 3D bboxes for a sample data token i.e. images taken from all the camera sensors at the same time
+#### An image sample with all the 3D bboxes for a sample data token i.e. images taken from all the sensors at the same time.
 ![Images_all_camera_bboxes](https://user-images.githubusercontent.com/71327507/216998094-ef3635e6-aa7d-4d69-a221-d76db56f9422.png)
 
 ---------------------------------------------------------------------------------------------------------------------------------
-### The dataset distribution
+#### The dataset distribution
 ![nuscenes_distribution1](https://user-images.githubusercontent.com/71327507/216977188-3bf35045-19b2-4166-a8b1-f63a9917a56c.png)
 
