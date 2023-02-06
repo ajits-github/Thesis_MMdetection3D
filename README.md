@@ -1,6 +1,6 @@
-![first_anno_instance](https://user-images.githubusercontent.com/71327507/216976928-b73e8d76-3261-499f-9bb4-7c2cb003fa05.png)
+![ttc](https://user-images.githubusercontent.com/71327507/216997607-57b7d703-c97f-4a27-a092-59eccbea40ff.png)
 ---------------------------------------------------------------------------------------------------------------------------------
-![car](https://user-images.githubusercontent.com/71327507/216977031-424a117f-1634-4cb1-a316-534c3da525cb.jpeg)
+
 
 ## Time-to-Collision Estimation for Objects in Autonomous Driving
 
@@ -11,6 +11,16 @@
 * The architecture of the model has been altered by adding the convolution and relu layers for ttc (time to collision)
 * The loss function is implemented from the paper - "Binary TTC: A Temporal Geofence for Autonomous Navigation" called Motion in Depth(MiD) error
 * Architecture of the network includes- ResNet101 as backbone, Feature Pyramid Network(FPN) as neck and FCOSMono3D as head
-* Below is the nuScenes dataset distribution
+* Below is the nuScenes dataset meta information  
+---------------------------------------------------------------------------------------------------------------------------------
+### The ego vehilce used for preparation of nuScenes dataset along with all the sensors
+![car](https://user-images.githubusercontent.com/71327507/216977031-424a117f-1634-4cb1-a316-534c3da525cb.jpeg)
 
+---------------------------------------------------------------------------------------------------------------------------------
+### An image sample with all the 3D bboxes for a sample data token i.e. images taken from all the camera sensors at the same time
+![Images_all_camera_bboxes](https://user-images.githubusercontent.com/71327507/216998094-ef3635e6-aa7d-4d69-a221-d76db56f9422.png)
+
+---------------------------------------------------------------------------------------------------------------------------------
+### The dataset distribution
 ![nuscenes_distribution1](https://user-images.githubusercontent.com/71327507/216977188-3bf35045-19b2-4166-a8b1-f63a9917a56c.png)
+
