@@ -53,16 +53,16 @@ class DefaultFormatBundle(object):
             else:
                 img = np.ascontiguousarray(results['img'].transpose(2, 0, 1))
                 results['img'] = DC(to_tensor(img), stack=True)
-        for key in [
-                'proposals', 'gt_bboxes', 'gt_bboxes_ignore', 'gt_labels',
-                'gt_labels_3d', 'attr_labels', 'pts_instance_mask',
-                'pts_semantic_mask', 'centers2d', 'depths'
-        ]:
         # for key in [
         #         'proposals', 'gt_bboxes', 'gt_bboxes_ignore', 'gt_labels',
         #         'gt_labels_3d', 'attr_labels', 'pts_instance_mask',
-        #         'pts_semantic_mask', 'centers2d', 'depths', 'time_to_coll'
+        #         'pts_semantic_mask', 'centers2d', 'depths'
         # ]:
+        for key in [
+                'proposals', 'gt_bboxes', 'gt_bboxes_ignore', 'gt_labels',
+                'gt_labels_3d', 'attr_labels', 'pts_instance_mask',
+                'pts_semantic_mask', 'centers2d', 'depths', 'time_to_coll'
+        ]:
             if key not in results:
                 continue
             if isinstance(results[key], list):

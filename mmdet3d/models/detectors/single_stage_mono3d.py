@@ -48,6 +48,17 @@ class SingleStageMono3DDetector(SingleStageDetector):
         assert isinstance(imgs, list)
         return [self.extract_feat(img) for img in imgs]
 
+    # def forward_train(self,
+    #                   img,
+    #                   img_metas,
+    #                   gt_bboxes,
+    #                   gt_labels,
+    #                   gt_bboxes_3d,
+    #                   gt_labels_3d,
+    #                   centers2d,
+    #                   depths,
+    #                   attr_labels=None,
+    #                   gt_bboxes_ignore=None):
     def forward_train(self,
                       img,
                       img_metas,
@@ -57,6 +68,7 @@ class SingleStageMono3DDetector(SingleStageDetector):
                       gt_labels_3d,
                       centers2d,
                       depths,
+                      time_to_coll,
                       attr_labels=None,
                       gt_bboxes_ignore=None):
         """
@@ -89,8 +101,15 @@ class SingleStageMono3DDetector(SingleStageDetector):
         x = self.extract_feat(img)
         losses = self.bbox_head.forward_train(x, img_metas, gt_bboxes,
                                               gt_labels, gt_bboxes_3d,
-                                              gt_labels_3d, centers2d, depths,
+                                              gt_labels_3d, centers2d, 
+                                              depths, time_to_coll,
                                               attr_labels, gt_bboxes_ignore)
+        # losses = self.bbox_head.forward_train(x, img_metas, gt_bboxes,
+        #                                       gt_labels, gt_bboxes_3d,
+        #                                       gt_labels_3d, centers2d, depths,
+        #                                       velo_global3d, relative_velo_global3d, depth_global3d,
+        #                                       relative_velo,ego_obj_distance, time_to_coll,
+        #                                       attr_labels, gt_bboxes_ignore)
         return losses
 
     def simple_test(self, img, img_metas, rescale=False):
@@ -109,6 +128,8 @@ class SingleStageMono3DDetector(SingleStageDetector):
         """
         x = self.extract_feat(img)
         outs = self.bbox_head(x)
+        # print("..........outs........", outs)
+        # exit()
         bbox_outputs = self.bbox_head.get_bboxes(
             *outs, img_metas, rescale=rescale)
 

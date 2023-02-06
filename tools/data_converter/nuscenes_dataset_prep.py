@@ -1603,11 +1603,11 @@ def get_2d_boxes(nusc,
         # print("box..................", box)
 
         # Added
-        locs = box.center.tolist()
+        # locs = box.center.tolist()
         dims = box.wlh
         dims[[0, 1, 2]] = dims[[1, 2, 0]]  # convert wlh to our lhw
         dims = dims.tolist()
-        rots = [box.orientation.yaw_pitch_roll[0]]
+        # rots = [box.orientation.yaw_pitch_roll[0]]
         # gt_box_3d = np.concatenate([locs, dims, rots], axis=1)
         # gt_box_3d = locs + dims + rots
         # print("gt_box_3d........", gt_box_3d)

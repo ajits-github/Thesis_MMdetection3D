@@ -29,7 +29,6 @@ class BaseMono3DDenseHead(BaseModule, metaclass=ABCMeta):
                       gt_labels_3d=None,
                       centers2d=None,
                       depths=None,
-                      time_to_coll=None,
                       attr_labels=None,
                       gt_bboxes_ignore=None,
                       proposal_cfg=None,
@@ -64,19 +63,12 @@ class BaseMono3DDenseHead(BaseModule, metaclass=ABCMeta):
                 proposal_list (list[Tensor]): Proposals of each image.
         """
         outs = self(x)
-        # if gt_labels is None:
-        #     loss_inputs = outs + (gt_bboxes, gt_bboxes_3d, centers2d, depths,
-        #                           attr_labels, img_metas)
-        # else:
-        #     loss_inputs = outs + (gt_bboxes, gt_labels, gt_bboxes_3d,
-        #                           gt_labels_3d, centers2d, depths, attr_labels,
-        #                           img_metas)
         if gt_labels is None:
-            loss_inputs = outs + (gt_bboxes, gt_bboxes_3d, centers2d, depths, time_to_coll,
+            loss_inputs = outs + (gt_bboxes, gt_bboxes_3d, centers2d, depths,
                                   attr_labels, img_metas)
         else:
             loss_inputs = outs + (gt_bboxes, gt_labels, gt_bboxes_3d,
-                                  gt_labels_3d, centers2d, depths, time_to_coll, attr_labels,
+                                  gt_labels_3d, centers2d, depths, attr_labels,
                                   img_metas)
         losses = self.loss(*loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
         if proposal_cfg is None:

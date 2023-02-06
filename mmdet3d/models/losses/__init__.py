@@ -5,6 +5,7 @@ from .chamfer_distance import ChamferDistance, chamfer_distance
 from .multibin_loss import MultiBinLoss
 from .paconv_regularization_loss import PAConvRegularizationLoss
 from .uncertain_smooth_l1_loss import UncertainL1Loss, UncertainSmoothL1Loss
+from .ttc_loss import TTCLoss
 
 __all__ = [
     'FocalLoss', 'SmoothL1Loss', 'binary_cross_entropy', 'ChamferDistance',

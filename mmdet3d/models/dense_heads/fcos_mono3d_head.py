@@ -75,9 +75,12 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
                      type='CrossEntropyLoss',
                      use_sigmoid=True,
                      loss_weight=1.0),
+                 loss_ttc=dict(
+                     type='TTCLoss'),
                  bbox_coder=dict(type='FCOS3DBBoxCoder', code_size=9),
                  norm_cfg=dict(type='GN', num_groups=32, requires_grad=True),
                  centerness_branch=(64, ),
+                 ttc_branch=(64,),
                  init_cfg=None,
                  **kwargs):
         self.regress_ranges = regress_ranges
@@ -87,6 +90,7 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
         self.centerness_on_reg = centerness_on_reg
         self.centerness_alpha = centerness_alpha
         self.centerness_branch = centerness_branch
+        self.ttc_branch = ttc_branch
         super().__init__(
             loss_cls=loss_cls,
             loss_bbox=loss_bbox,
@@ -96,6 +100,7 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
             init_cfg=init_cfg,
             **kwargs)
         self.loss_centerness = build_loss(loss_centerness)
+        self.loss_ttc = build_loss(loss_ttc)
         bbox_coder['code_size'] = self.bbox_code_size
         self.bbox_coder = build_bbox_coder(bbox_coder)
 
@@ -111,6 +116,13 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
             nn.ModuleList([Scale(1.0) for _ in range(self.scale_dim)])
             for _ in self.strides
         ])
+        self.conv_ttc_prev = self._init_branch(
+            conv_channels=self.ttc_branch,
+            conv_strides=(1, ) * len(self.ttc_branch,))
+        self.conv_ttc = nn.Conv2d(self.ttc_branch[-1], 1, 1)
+        
+        
+
 
     def init_weights(self):
         """Initialize weights of the head.
@@ -124,6 +136,11 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
             if isinstance(m.conv, nn.Conv2d):
                 normal_init(m.conv, std=0.01)
         normal_init(self.conv_centerness, std=0.01)
+
+        for m in self.conv_ttc_prev:
+            if isinstance(m.conv, nn.Conv2d):
+                normal_init(m.conv, std=0.01)
+        normal_init(self.conv_ttc, std=0.01)
 
     def forward(self, feats):
         """Forward features from the upstream network.
@@ -150,8 +167,12 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
                     each is a 4D-tensor, the channel number is num_points * 1.
         """
         # Note: we use [:5] to filter feats and only return predictions
+        # return multi_apply(self.forward_single, feats, self.scales,
+        #                    self.strides)[:5]
+
+        # Note: we use [:6] to filter feats and only return predictions
         return multi_apply(self.forward_single, feats, self.scales,
-                           self.strides)[:5]
+                           self.strides)[:6]
 
     def forward_single(self, x, scale, stride):
         """Forward features of a single scale level.
@@ -172,20 +193,26 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
             super().forward_single(x)
 
         if self.centerness_on_reg:
+            
             clone_reg_feat = reg_feat.clone()
             for conv_centerness_prev_layer in self.conv_centerness_prev:
                 clone_reg_feat = conv_centerness_prev_layer(clone_reg_feat)
             centerness = self.conv_centerness(clone_reg_feat)
+            ttc = self.conv_ttc(clone_reg_feat)
         else:
             clone_cls_feat = cls_feat.clone()
             for conv_centerness_prev_layer in self.conv_centerness_prev:
                 clone_cls_feat = conv_centerness_prev_layer(clone_cls_feat)
             centerness = self.conv_centerness(clone_cls_feat)
+            ttc = self.conv_ttc(clone_cls_feat)
+
 
         bbox_pred = self.bbox_coder.decode(bbox_pred, scale, stride,
                                            self.training, cls_score)
 
-        return cls_score, bbox_pred, dir_cls_pred, attr_pred, centerness, \
+        # return cls_score, bbox_pred, dir_cls_pred, attr_pred, centerness, \
+        #     cls_feat, reg_feat
+        return cls_score, bbox_pred, dir_cls_pred, attr_pred, centerness, ttc, \
             cls_feat, reg_feat
 
     @staticmethod
@@ -251,19 +278,21 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
 
     @force_fp32(
         apply_to=('cls_scores', 'bbox_preds', 'dir_cls_preds', 'attr_preds',
-                  'centernesses'))
+                  'centernesses', 'ttc'))
     def loss(self,
              cls_scores,
              bbox_preds,
              dir_cls_preds,
              attr_preds,
              centernesses,
+             ttc,
              gt_bboxes,
              gt_labels,
              gt_bboxes_3d,
              gt_labels_3d,
              centers2d,
              depths,
+             time_to_coll,
              attr_labels,
              img_metas,
              gt_bboxes_ignore=None):
@@ -303,15 +332,26 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
         Returns:
             dict[str, Tensor]: A dictionary of loss components.
         """
+        # assert len(cls_scores) == len(bbox_preds) == len(centernesses) == len(
+        #     attr_preds)
         assert len(cls_scores) == len(bbox_preds) == len(centernesses) == len(
-            attr_preds)
+            attr_preds) == len(ttc)
+
         featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]
         all_level_points = self.get_points(featmap_sizes, bbox_preds[0].dtype,
                                            bbox_preds[0].device)
-        labels_3d, bbox_targets_3d, centerness_targets, attr_targets = \
+        # labels_3d, bbox_targets_3d, centerness_targets, attr_targets = \
+        #     self.get_targets(
+        #         all_level_points, gt_bboxes, gt_labels, gt_bboxes_3d,
+        #         gt_labels_3d, centers2d, depths, attr_labels)
+
+        labels_3d, bbox_targets_3d, centerness_targets, ttc_targets, attr_targets = \
             self.get_targets(
                 all_level_points, gt_bboxes, gt_labels, gt_bboxes_3d,
-                gt_labels_3d, centers2d, depths, attr_labels)
+                gt_labels_3d, centers2d, depths, time_to_coll, attr_labels)
+
+        # print("........centerness_targets.size.............",len(centerness_targets))
+        # print("........ttc_targets.size.............",len(ttc_targets))
 
         num_imgs = cls_scores[0].size(0)
         # flatten cls_scores, bbox_preds, dir_cls_preds and centerness
@@ -331,13 +371,25 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
             centerness.permute(0, 2, 3, 1).reshape(-1)
             for centerness in centernesses
         ]
+        flatten_ttc = [
+            ttc.permute(0, 2, 3, 1).reshape(-1)
+            for ttc in ttc
+        ]
+        # print("............flatten_centerness.size........", len(flatten_centerness))
+        # print("............flatten_ttc.size........", len(flatten_ttc))
+        # print("............flatten_centerness.........", flatten_centerness)
+        # print("............flatten_ttc.........", flatten_ttc)
+
         flatten_cls_scores = torch.cat(flatten_cls_scores)
         flatten_bbox_preds = torch.cat(flatten_bbox_preds)
         flatten_dir_cls_preds = torch.cat(flatten_dir_cls_preds)
         flatten_centerness = torch.cat(flatten_centerness)
+        flatten_ttc = torch.cat(flatten_ttc)
+
         flatten_labels_3d = torch.cat(labels_3d)
         flatten_bbox_targets_3d = torch.cat(bbox_targets_3d)
         flatten_centerness_targets = torch.cat(centerness_targets)
+        flatten_ttc_targets = torch.cat(ttc_targets)
 
         # FG cat_id: [0, num_classes -1], BG cat_id: num_classes
         bg_class_ind = self.num_classes
@@ -353,6 +405,7 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
         pos_bbox_preds = flatten_bbox_preds[pos_inds]
         pos_dir_cls_preds = flatten_dir_cls_preds[pos_inds]
         pos_centerness = flatten_centerness[pos_inds]
+        pos_ttc = flatten_ttc[pos_inds]
 
         if self.pred_attrs:
             flatten_attr_preds = [
@@ -366,6 +419,7 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
         if num_pos > 0:
             pos_bbox_targets_3d = flatten_bbox_targets_3d[pos_inds]
             pos_centerness_targets = flatten_centerness_targets[pos_inds]
+            pos_ttc_targets = flatten_ttc_targets[pos_inds]
             if self.pred_attrs:
                 pos_attr_targets = flatten_attr_targets[pos_inds]
             bbox_weights = pos_centerness_targets.new_ones(
@@ -420,6 +474,11 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
 
             loss_centerness = self.loss_centerness(pos_centerness,
                                                    pos_centerness_targets)
+            # print("............pos_centerness.size........", pos_centerness.size())
+            # print("............pos_centerness_targets.size........", pos_centerness_targets.size())
+
+            loss_ttc = self.loss_ttc(pos_ttc,
+                                    pos_ttc_targets)
 
             # direction classification loss
             loss_dir = None
@@ -450,6 +509,7 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
             if self.pred_velo:
                 loss_velo = pos_bbox_preds[:, 7:9].sum()
             loss_centerness = pos_centerness.sum()
+            loss_ttc = pos_ttc.sum()
             loss_dir = None
             if self.use_direction_classifier:
                 loss_dir = pos_dir_cls_preds.sum()
@@ -463,7 +523,11 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
             loss_depth=loss_depth,
             loss_size=loss_size,
             loss_rotsin=loss_rotsin,
-            loss_centerness=loss_centerness)
+            loss_centerness=loss_centerness,
+            loss_ttc=loss_ttc)
+
+        print(".............loss_ttc.............", loss_ttc)
+        # exit()
 
         if loss_velo is not None:
             loss_dict['loss_velo'] = loss_velo
@@ -478,13 +542,14 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
 
     @force_fp32(
         apply_to=('cls_scores', 'bbox_preds', 'dir_cls_preds', 'attr_preds',
-                  'centernesses'))
+                  'centernesses', 'ttc'))
     def get_bboxes(self,
                    cls_scores,
                    bbox_preds,
                    dir_cls_preds,
                    attr_preds,
                    centernesses,
+                   ttc,
                    img_metas,
                    cfg=None,
                    rescale=None):
@@ -517,7 +582,7 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
                 the corresponding box.
         """
         assert len(cls_scores) == len(bbox_preds) == len(dir_cls_preds) == \
-            len(centernesses) == len(attr_preds)
+            len(centernesses) == len(attr_preds) == len(ttc)
         num_levels = len(cls_scores)
 
         featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]
@@ -556,10 +621,13 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
             centerness_pred_list = [
                 centernesses[i][img_id].detach() for i in range(num_levels)
             ]
+            ttc_pred_list = [
+                ttc[i][img_id].detach() for i in range(num_levels)
+            ]
             input_meta = img_metas[img_id]
             det_bboxes = self._get_bboxes_single(
                 cls_score_list, bbox_pred_list, dir_cls_pred_list,
-                attr_pred_list, centerness_pred_list, mlvl_points, input_meta,
+                attr_pred_list, centerness_pred_list, ttc_pred_list, mlvl_points, input_meta,
                 cfg, rescale)
             result_list.append(det_bboxes)
         return result_list
@@ -570,6 +638,7 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
                            dir_cls_preds,
                            attr_preds,
                            centernesses,
+                           ttcs,
                            mlvl_points,
                            input_meta,
                            cfg,
@@ -608,10 +677,11 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
         mlvl_dir_scores = []
         mlvl_attr_scores = []
         mlvl_centerness = []
+        mlvl_ttc = []
 
-        for cls_score, bbox_pred, dir_cls_pred, attr_pred, centerness, \
+        for cls_score, bbox_pred, dir_cls_pred, attr_pred, centerness, ttc, \
                 points in zip(cls_scores, bbox_preds, dir_cls_preds,
-                              attr_preds, centernesses, mlvl_points):
+                              attr_preds, centernesses, ttcs, mlvl_points):
             assert cls_score.size()[-2:] == bbox_pred.size()[-2:]
             scores = cls_score.permute(1, 2, 0).reshape(
                 -1, self.cls_out_channels).sigmoid()
@@ -620,6 +690,7 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
             attr_pred = attr_pred.permute(1, 2, 0).reshape(-1, self.num_attrs)
             attr_score = torch.max(attr_pred, dim=-1)[1]
             centerness = centerness.permute(1, 2, 0).reshape(-1).sigmoid()
+            ttc = ttc.permute(1, 2, 0).reshape(-1)
 
             bbox_pred = bbox_pred.permute(1, 2,
                                           0).reshape(-1,
@@ -634,6 +705,7 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
                 scores = scores[topk_inds, :]
                 dir_cls_pred = dir_cls_pred[topk_inds, :]
                 centerness = centerness[topk_inds]
+                ttc = ttc[topk_inds]
                 dir_cls_score = dir_cls_score[topk_inds]
                 attr_score = attr_score[topk_inds]
             # change the offset to actual center predictions
@@ -648,6 +720,7 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
             mlvl_dir_scores.append(dir_cls_score)
             mlvl_attr_scores.append(attr_score)
             mlvl_centerness.append(centerness)
+            mlvl_ttc.append(ttc)
 
         mlvl_centers2d = torch.cat(mlvl_centers2d)
         mlvl_bboxes = torch.cat(mlvl_bboxes)
@@ -672,6 +745,7 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
         mlvl_scores = torch.cat([mlvl_scores, padding], dim=1)
         mlvl_attr_scores = torch.cat(mlvl_attr_scores)
         mlvl_centerness = torch.cat(mlvl_centerness)
+        mlvl_ttc = torch.cat(mlvl_ttc)
         # no scale_factors in box3d_multiclass_nms
         # Then we multiply it from outside
         mlvl_nms_scores = mlvl_scores * mlvl_centerness[:, None]
@@ -741,9 +815,12 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
                              dim=-1) + stride // 2
         return points
 
+    # def get_targets(self, points, gt_bboxes_list, gt_labels_list,
+    #                 gt_bboxes_3d_list, gt_labels_3d_list, centers2d_list,
+    #                 depths_list, attr_labels_list):
     def get_targets(self, points, gt_bboxes_list, gt_labels_list,
                     gt_bboxes_3d_list, gt_labels_3d_list, centers2d_list,
-                    depths_list, attr_labels_list):
+                    depths_list, time_to_coll_list, attr_labels_list):
         """Compute regression, classification and centerss targets for points
         in multiple images.
 
@@ -773,6 +850,9 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
         """
         assert len(points) == len(self.regress_ranges)
         num_levels = len(points)
+        # print("...........num_levels.........", num_levels)
+        # print("...........points.........", points)
+        
         # expand regress ranges to align with points
         expanded_regress_ranges = [
             points[i].new_tensor(self.regress_ranges[i])[None].expand_as(
@@ -782,8 +862,18 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
         concat_regress_ranges = torch.cat(expanded_regress_ranges, dim=0)
         concat_points = torch.cat(points, dim=0)
 
+        # print("...........len(concat_points).........", len(concat_points))
+        # print("...........concat_regress_ranges.........", concat_regress_ranges)
+        # print("...........len(concat_regress_ranges).........", len(concat_regress_ranges))
+
         # the number of points per img, per lvl
         num_points = [center.size(0) for center in points]
+        # for center in points:
+        #     print("...........center.........", center)
+        #     print("..........center.size(0)...........", center.size(0))
+        #     break    
+        # print("...........num_points.........", num_points)
+        # exit()
 
         if attr_labels_list is None:
             attr_labels_list = [
@@ -792,7 +882,7 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
             ]
 
         # get labels and bbox_targets of each image
-        _, _, labels_3d_list, bbox_targets_3d_list, centerness_targets_list, \
+        _, _, labels_3d_list, bbox_targets_3d_list, centerness_targets_list, ttc_targets_list, \
             attr_targets_list = multi_apply(
                 self._get_target_single,
                 gt_bboxes_list,
@@ -801,8 +891,9 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
                 gt_labels_3d_list,
                 centers2d_list,
                 depths_list,
+                time_to_coll_list,
                 attr_labels_list,
-                points=concat_points,
+                points=concat_points, # sending all the points which was found at different fpn levels
                 regress_ranges=concat_regress_ranges,
                 num_points_per_lvl=num_points)
 
@@ -823,11 +914,32 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
             for attr_targets in attr_targets_list
         ]
 
+        # print(".....ttc_targets_list...before..", ttc_targets_list)
+
+        # Custom
+        ttc_targets_list = [
+            ttc_targets.split(num_points, 0)
+            for ttc_targets in ttc_targets_list
+        ]
+
+        # print(".....ttc_targets_list...after..", ttc_targets_list)
+        # exit()
+
         # concat per level image
         concat_lvl_labels_3d = []
         concat_lvl_bbox_targets_3d = []
         concat_lvl_centerness_targets = []
         concat_lvl_attr_targets = []
+        concat_lvl_ttc_targets = [] # Custom
+
+        # print(".........centerness_targets_list[0]......", centerness_targets_list[0])
+        # print(".........centerness_targets_list[1]......", centerness_targets_list[1])
+        # print(".........ttc_targets_list[0]......", ttc_targets_list[0])
+        # print(".........ttc_targets_list[1]......", ttc_targets_list[1])
+        # print(".....labels_3d_list[0]...........", labels_3d_list[0])
+        # print(".....bbox_targets_3d_list[0]...........", bbox_targets_3d_list[0])
+        # exit()
+
         for i in range(num_levels):
             concat_lvl_labels_3d.append(
                 torch.cat([labels[i] for labels in labels_3d_list]))
@@ -842,21 +954,45 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
             concat_lvl_attr_targets.append(
                 torch.cat(
                     [attr_targets[i] for attr_targets in attr_targets_list]))
+            
+            concat_lvl_ttc_targets.append(
+                torch.cat([
+                    ttc_targets[i] 
+                    for ttc_targets in ttc_targets_list
+                    ]))
+            
             if self.norm_on_bbox:
                 bbox_targets_3d[:, :
                                 2] = bbox_targets_3d[:, :2] / self.strides[i]
             concat_lvl_bbox_targets_3d.append(bbox_targets_3d)
         return concat_lvl_labels_3d, concat_lvl_bbox_targets_3d, \
-            concat_lvl_centerness_targets, concat_lvl_attr_targets
+            concat_lvl_centerness_targets, concat_lvl_ttc_targets, concat_lvl_attr_targets
 
+    # def _get_target_single(self, gt_bboxes, gt_labels, gt_bboxes_3d,
+    #                        gt_labels_3d, centers2d, depths, attr_labels,
+    #                        points, regress_ranges, num_points_per_lvl):
     def _get_target_single(self, gt_bboxes, gt_labels, gt_bboxes_3d,
-                           gt_labels_3d, centers2d, depths, attr_labels,
+                           gt_labels_3d, centers2d, depths, time_to_coll, attr_labels,
                            points, regress_ranges, num_points_per_lvl):
         """Compute regression and classification targets for a single image."""
         num_points = points.size(0)
         num_gts = gt_labels.size(0)
+        # print("........num_points.........", num_points)
+        # print("........num_gts.........", num_gts)
+        # print("........gt_labels.........", gt_labels.size(0))
+        # print("........gt_bboxes_3d.........", gt_bboxes_3d)
+        # print("........gt_labels_3d.........", gt_labels_3d.size(0))
+        # print("........centers2d.........", centers2d.size(0))
+        # print("........depths.........", depths.size(0))
+        # print("........time_to_coll.........", time_to_coll.size(0))
+        # print("........attr_labels.........", attr_labels.size(0))
+        # print("........regress_ranges..size.......", regress_ranges.size(0))
+        # print("........regress_ranges.........", regress_ranges)
+        # print("........num_points_per_lvl.........", num_points_per_lvl)
+        # exit()
+
         if not isinstance(gt_bboxes_3d, torch.Tensor):
-            gt_bboxes_3d = gt_bboxes_3d.tensor.to(gt_bboxes.device)
+            gt_bboxes_3d = gt_bboxes_3d.tensor.to(gt_bboxes.device)            
         if num_gts == 0:
             return gt_labels.new_full((num_points,), self.background_label), \
                    gt_bboxes.new_zeros((num_points, 4)), \
@@ -864,6 +1000,7 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
                        (num_points,), self.background_label), \
                    gt_bboxes_3d.new_zeros((num_points, self.bbox_code_size)), \
                    gt_bboxes_3d.new_zeros((num_points,)), \
+                   time_to_coll.new_zeros((num_points,)), \
                    attr_labels.new_full(
                        (num_points,), self.attr_background_label)
 
@@ -873,19 +1010,43 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
 
         areas = (gt_bboxes[:, 2] - gt_bboxes[:, 0]) * (
             gt_bboxes[:, 3] - gt_bboxes[:, 1])
+        # print(".........areas....before.........", areas.size())
         areas = areas[None].repeat(num_points, 1)
+        # print(".........areas.....after........", areas.size())
+        # exit()
+        # print("...........regress_ranges.....before....", regress_ranges.size())
         regress_ranges = regress_ranges[:, None, :].expand(
             num_points, num_gts, 2)
+        # print("...........regress_ranges.....after....", regress_ranges.size())
+        
+        # print("...........gt_bboxes.....before....", gt_bboxes.size())
         gt_bboxes = gt_bboxes[None].expand(num_points, num_gts, 4)
+        # print("...........gt_bboxes.....after....", gt_bboxes.size())
+
+        # print("...........centers2d.....before....", centers2d.size())
         centers2d = centers2d[None].expand(num_points, num_gts, 2)
+        # print("...........centers2d.....after....", centers2d.size())
+
+        # print("...........gt_bboxes_3d.....before....", gt_bboxes_3d.size())
         gt_bboxes_3d = gt_bboxes_3d[None].expand(num_points, num_gts,
                                                  self.bbox_code_size)
+        # print("...........gt_bboxes_3d.....after....", gt_bboxes_3d.size())
+
+        # print("...........depths.....before....", depths.size())
+        # print("...........depths.....before....", depths)
         depths = depths[None, :, None].expand(num_points, num_gts, 1)
+        # print("...........depths.....after..size..", depths.size())
+        # print("...........depths.....after....", depths[:6, ...])
+
         xs, ys = points[:, 0], points[:, 1]
+        
         xs = xs[:, None].expand(num_points, num_gts)
         ys = ys[:, None].expand(num_points, num_gts)
 
+        # print("...........xs.....before....", xs.size())
         delta_xs = (xs - centers2d[..., 0])[..., None]
+        # print("...........xs.....after....", xs.size())
+
         delta_ys = (ys - centers2d[..., 1])[..., None]
         bbox_targets_3d = torch.cat(
             (delta_xs, delta_ys, depths, gt_bboxes_3d[..., 3:]), dim=-1)
@@ -937,12 +1098,50 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
         dists[inside_regress_range == 0] = INF
         min_dist, min_dist_inds = dists.min(dim=1)
 
+        # print(".............min_dist............",min_dist.size())
+        # print(".............min_dist_inds............",min_dist_inds.size())
+        # print("..........min_dist...........", min_dist)
+        # print("..........min_dist_inds...........", min_dist_inds)
+
+        # print(".........gt_labels...before..", gt_labels)
         labels = gt_labels[min_dist_inds]
         labels_3d = gt_labels_3d[min_dist_inds]
         attr_labels = attr_labels[min_dist_inds]
         labels[min_dist == INF] = self.background_label  # set as BG
         labels_3d[min_dist == INF] = self.background_label  # set as BG
         attr_labels[min_dist == INF] = self.attr_background_label
+
+        # print("............time_to_coll....before......", time_to_coll)
+        # time_to_coll = time_to_coll[None, :, None].expand(num_points, num_gts, 1)
+        time_to_coll = time_to_coll[None, :].expand(num_points, num_gts)
+        # print("............time_to_coll....after size......", time_to_coll.size())
+        # print("............time_to_coll....after......", time_to_coll[:6, ...])
+        # exit()
+
+
+        # print(".........centerness_targets[0]......", centerness_targets[0])
+        # print(".........centerness_targets[1]......", centerness_targets[1])
+        # print(".........time_to_coll[0]......", time_to_coll[0])
+        # print(".........time_to_coll[1]......", time_to_coll[1])
+        # print(".....gt_labels_3d[0]...........", gt_labels_3d[0])
+        # print(".....labels[0]...........", labels[0])
+        # print(".....labels_3d[0]...........", labels_3d[0])
+        # print(".....bbox_targets_3d[0]...........", bbox_targets_3d[0])
+
+        # time_to_coll = time_to_coll[min_dist_inds]
+
+        # print(".....labels.....after....", labels)
+        # print(".....labels_3d.....after....", labels_3d)
+        time_to_coll = time_to_coll[range(num_points), min_dist_inds]
+        # time_to_coll = time_to_coll[min_dist_inds]
+        # print(".............time_to_coll..size........after..", time_to_coll.size())
+        # print(".............time_to_coll[]........after..", time_to_coll)
+        # exit()
+
+
+        # print(".............bbox_targets........before..", bbox_targets.size())
+        # print(".............bbox_targets_3d........before..", bbox_targets_3d.size())
+
 
         bbox_targets = bbox_targets[range(num_points), min_dist_inds]
         bbox_targets_3d = bbox_targets_3d[range(num_points), min_dist_inds]
@@ -952,5 +1151,12 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
         # [N, 1] / [N, 1]
         centerness_targets = torch.exp(-self.centerness_alpha * relative_dists)
 
+        # print(".............bbox_targets........after..", bbox_targets[..., :4])
+        # print(".............bbox_targets........after..", bbox_targets.size())
+        # print(".............bbox_targets_3d........after..", bbox_targets_3d.size())
+        # print(".............centerness_targets........after..", centerness_targets.size())
+        # exit()
+        
+
         return labels, bbox_targets, labels_3d, bbox_targets_3d, \
-            centerness_targets, attr_labels
+            centerness_targets, time_to_coll, attr_labels

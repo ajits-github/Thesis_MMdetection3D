@@ -24,28 +24,28 @@ train_pipeline = [
         with_bbox_3d=True,
         with_label_3d=True,
         with_bbox_depth=True),
-    # dict(type='Resize', img_scale=(1600, 900), keep_ratio=True),
-    dict(type='Resize', img_scale=(16, 9), keep_ratio=True),
+    dict(type='Resize', img_scale=(1600, 900), keep_ratio=True),
+    # dict(type='Resize', img_scale=(16, 9), keep_ratio=True),
     dict(type='RandomFlip3D', flip_ratio_bev_horizontal=0.5),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
     dict(type='DefaultFormatBundle3D', class_names=class_names),
     dict(
         type='Collect3D',
-        keys=[
-            'img', 'gt_bboxes', 'gt_labels', 'attr_labels', 'gt_bboxes_3d',
-            'gt_labels_3d', 'centers2d', 'depths'
-        ]),
+        # keys=[
+        #     'img', 'gt_bboxes', 'gt_labels', 'attr_labels', 'gt_bboxes_3d',
+        #     'gt_labels_3d', 'centers2d', 'depths'
+        # ]),
         # keys=[
         #     'img', 'gt_bboxes', 'gt_labels', 'attr_labels', 'gt_bboxes_3d',
         #     'gt_labels_3d', 'centers2d', 'depths', 
         #     'velo_global3d', 'relative_velo_global3d', 'depth_global3d', 
         #     'relative_velo','ego_obj_distance', 'time_to_coll'
         # ]),
-        # keys=[
-        #     'img', 'gt_bboxes', 'gt_labels', 'attr_labels', 'gt_bboxes_3d',
-        #     'gt_labels_3d', 'centers2d', 'depths', 'time_to_coll'
-        # ])   
+        keys=[
+            'img', 'gt_bboxes', 'gt_labels', 'attr_labels', 'gt_bboxes_3d',
+            'gt_labels_3d', 'centers2d', 'depths', 'time_to_coll'
+        ])   
 ]
 test_pipeline = [
     dict(type='LoadImageFromFileMono3D'),
@@ -66,7 +66,7 @@ test_pipeline = [
 ]
 data = dict(
     samples_per_gpu=2,
-    workers_per_gpu=2,
+    workers_per_gpu=8,
     # samples_per_gpu=1,
     # workers_per_gpu=1,
     train=dict(pipeline=train_pipeline),
@@ -85,9 +85,9 @@ lr_config = dict(
     warmup_iters=100,
     warmup_ratio=1.0 / 3,
     step=[8, 11])
-total_epochs = 10
+total_epochs = 1
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)
-evaluation = dict(interval=5)
+evaluation = dict(interval=10)
 # checkpoint_config = dict(interval=1)
 # evaluation = dict(interval=total_epochs)
 # evaluation = dict(interval=10)
