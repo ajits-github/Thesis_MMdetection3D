@@ -11,5 +11,5 @@ __all__ = [
     'FocalLoss', 'SmoothL1Loss', 'binary_cross_entropy', 'ChamferDistance',
     'chamfer_distance', 'axis_aligned_iou_loss', 'AxisAlignedIoULoss',
     'PAConvRegularizationLoss', 'UncertainL1Loss', 'UncertainSmoothL1Loss',
-    'MultiBinLoss'
+    'MultiBinLoss', 'TTCLoss'
 ]

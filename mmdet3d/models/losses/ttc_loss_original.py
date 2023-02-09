@@ -163,47 +163,23 @@ def ratio_of_depths(time_interval, ttc):
     ratio_of_depth = 1 - time_interval/ttc
     return ratio_of_depth
 
-# def check_values(preds, targets):
-#     for idx, (pred, target) in enumerate(zip(preds, targets)):
-#         if 0<= pred and pred<= 0.5:
-#             preds[idx] = 0.6
-#         if (0<= target and target<= 0.5) or torch.isnan(target):
-#             targets[idx] = 0.6
-
-#     return preds, targets
-
-def check_values(tensors):
-    for idx, tensor in enumerate(tensors):
-        if 0<= tensor and tensor<= 0.5 or torch.isnan(tensor):
-            tensors[idx] = 0.6
-
-    return tensors
-
-def apply_softmax(preds, scale):
-    preds = preds.softmax(dim=0)    # apply softmax, try and see with tanh
-    preds = preds - 0.5         # move the range to [-0.5, 0.5]
-    preds = preds * 2*scale     # move the range to [-10, 10]
-    return preds
-
-def apply_min_max(preds, targets, clamp_value):
-    pred_clone = preds.clone()
-    target_clone = targets.clone()
+def check_values(preds, targets):
     for idx, (pred, target) in enumerate(zip(preds, targets)):
-        pred_clone[idx] = min(max(-10, pred), clamp_value)
-        # preds[idx] = pred_new
-        target_clone[idx] = min(max(-10, target), clamp_value)
-        # targets[idx] = target_new
+        if 0<= pred and pred<= 0.5:
+            preds[idx] = 0.6
+        if (0<= target and target<= 0.5) or torch.isnan(target):
+            targets[idx] = 0.6
 
-    return pred_clone, target_clone
+    return preds, targets
 
 
+            
 
 @LOSSES.register_module()
 class TTCLoss(nn.Module):
-    def __init__(self, time_interval=0.5, scale=10) -> None:
+    def __init__(self, time_interval=0.5) -> None:
         super().__init__()
         self.time_interval = time_interval
-        self.scale = scale # the clamping value
 
     def forward(self, initial_preds, initial_targets, avg_factor=None):
         # print("................pred.size........",initial_preds.size())
@@ -212,19 +188,9 @@ class TTCLoss(nn.Module):
         # print("................target........",target)
         assert initial_preds.size() == initial_targets.size()
 
-
-
-        # self.preds, self.targets = check_values(initial_preds, initial_targets)
-        self.targets = check_values(initial_targets)  # check for nans or 0<=pred<=0.5 in targets
-        # print('.......pred...before softmax...', initial_preds)
-        self.preds = apply_softmax(initial_preds, self.scale) # apply softamx for preds and rescale 
-        # print('.......pred...after softmax...', self.preds)
-        self.preds, self.targets = apply_min_max(self.preds, self.targets, self.scale) # clamp the values greater than scale for both preds and targets
-        self.preds = check_values(self.preds) # check for nans or 0<=pred<=0.5 in preds
-
-
-        # print('.......pred....before mid..', self.preds)
-        # print('.......target...before mid...', self.targets)
+        self.preds, self.targets = check_values(initial_preds, initial_targets)
+        # print('.......pred......', pred)
+        # print('.......target......', target)
 
         ratio_of_depths_pred = ratio_of_depths(self.time_interval, self.preds)
         ratio_of_depths_target = ratio_of_depths(self.time_interval, self.targets)

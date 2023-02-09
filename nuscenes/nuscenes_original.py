@@ -44,7 +44,6 @@ class NuScenes:
     def __init__(self,
                  version: str = 'v1.0-mini',
                  dataroot: str = '/data/sets/nuscenes',
-                #  dataroot: str = 'content/drive/MyDrive/Colab Notebooks/Thesis/v1.0-mini',
                  verbose: bool = True,
                  map_resolution: float = 0.1):
         """
@@ -60,8 +59,6 @@ class NuScenes:
         self.table_names = ['category', 'attribute', 'visibility', 'instance', 'sensor', 'calibrated_sensor',
                             'ego_pose', 'log', 'scene', 'sample', 'sample_data', 'sample_annotation', 'map']
 
-        print("..........dataroot........", dataroot)
-        # exit()
         assert osp.exists(self.table_root), 'Database version not found: {}'.format(self.table_root)
 
         start_time = time.time()
@@ -1544,16 +1541,7 @@ class NuScenesExplorer:
 
             sample_data_record = self.nusc.get('sample_data', sample_record['data']['LIDAR_TOP'])
             pose_record = self.nusc.get('ego_pose', sample_data_record['ego_pose_token'])
-            # dist = np.linalg.norm(np.array(pose_record['translation']) - np.array(ann_record['translation']))
-            dist = np.linalg.norm(np.array(ann_record['translation']) - np.array(pose_record['translation']))
-            # Added
-            # s_rec = self.get('sample', sample_data_record['sample_token'])
-            ego_velo = self.ego_velocity(sample_record['token'])
-            velocity_global = np.array(self.nusc.box_velocity(ann_record['token']))
-            relative_velo_global = velocity_global - ego_velo
-            ttc = dist / np.linalg.norm(np.array(relative_velo_global[:2]))
-            print(".............ttc...........", ttc)
-            ## Added
+            dist = np.linalg.norm(np.array(pose_record['translation']) - np.array(ann_record['translation']))
 
             information = ' \n'.join(['category: {}'.format(category),
                                       '',
@@ -1564,70 +1552,13 @@ class NuScenesExplorer:
                                       '',
                                       'width:  {:>7.3f}m'.format(w),
                                       'length: {:>7.3f}m'.format(l),
-                                      'height: {:>7.3f}m'.format(h),
-                                      'time to collision: {:>7.3f}secs'.format(ttc)])
+                                      'height: {:>7.3f}m'.format(h)])
 
             plt.annotate(information, (0, 0), (0, -20), xycoords='axes fraction', textcoords='offset points', va='top')
 
         if out_path is not None:
             plt.savefig(out_path)
-    
-    ##########################################  NEW   ######################################
-    import numpy as np
-    def ego_velocity(self, sample_token: str, max_time_diff: float = 1.5):
-        current = self.nusc.get('sample', sample_token)
-        has_prev = current['prev'] != ''
-        has_next = current['next'] != ''
 
-        # Cannot estimate velocity for a single sample.
-        if not has_prev and not has_next:
-            raise  Exception("The sample doesn't have previous and next")
-            # return np.array([np.nan, np.nan, np.nan])
-
-        if has_prev:
-            first = self.nusc.get('sample', current['prev'])
-        else:
-            first = current
-
-        if has_next:
-            last = self.nusc.get('sample', current['next'])
-        else:
-            last = current
-
-        
-        sd_rec_firstsample = self.nusc.get('sample_data', first['data']['LIDAR_TOP'])
-        #   cs_record_firstsample = nusc.get('calibrated_sensor',
-        #                         sd_rec_firstsample['calibrated_sensor_token'])
-        # print(cs_record_firstsample)
-        pose_record_firstsample = self.nusc.get('ego_pose', sd_rec_firstsample['ego_pose_token'])
-
-        sd_rec_lastsample = self.nusc.get('sample_data', last['data']['LIDAR_TOP'])
-        #   cs_record_lastsample = nusc.get('calibrated_sensor',
-        #                         sd_rec_lastsample['calibrated_sensor_token'])
-        pose_record_lastsample = self.nusc.get('ego_pose', sd_rec_lastsample['ego_pose_token'])
-
-
-        pos_last = np.array(pose_record_lastsample['translation'])
-        pos_first = np.array(pose_record_firstsample['translation'])
-        pos_diff = pos_last - pos_first
-
-        time_last = 1e-6 * last['timestamp']
-        time_first = 1e-6 * first['timestamp']
-        time_diff = time_last - time_first
-
-        if has_next and has_prev:
-            # If doing centered difference, allow for up to double the max_time_diff.
-            max_time_diff *= 2
-
-        if time_diff > max_time_diff:
-            # If time_diff is too big, don't return an estimate.
-            return np.array([np.nan, np.nan, np.nan])
-        else:
-            return pos_diff / time_diff
-
-    ##########################################  NEW   ######################################
-
-    
     def render_instance(self,
                         instance_token: str,
                         margin: float = 10,

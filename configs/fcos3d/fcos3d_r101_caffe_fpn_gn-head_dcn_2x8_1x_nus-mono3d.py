@@ -87,10 +87,9 @@ lr_config = dict(
     step=[8, 11])
 total_epochs = 1
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)
-evaluation = dict(interval=10)
-# checkpoint_config = dict(interval=1)
-# evaluation = dict(interval=total_epochs)
 # evaluation = dict(interval=10)
+# checkpoint_config = dict(interval=1)
+evaluation = dict(interval=total_epochs)
 checkpoint_config = dict(interval=total_epochs)
 load_from = 'work_dirs/fcos3d_nus/latest.pth'
 # load_from = 'work_dirs/fcos3d_r101_caffe_fpn_gn-head_dcn_2x8_1x_nus-mono3d/epoch_100.pth'

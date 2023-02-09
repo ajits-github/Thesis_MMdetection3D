@@ -110,6 +110,7 @@ class SingleStageMono3DDetector(SingleStageDetector):
         #                                       velo_global3d, relative_velo_global3d, depth_global3d,
         #                                       relative_velo,ego_obj_distance, time_to_coll,
         #                                       attr_labels, gt_bboxes_ignore)
+        # print(".............losses.........", losses)
         return losses
 
     def simple_test(self, img, img_metas, rescale=False):

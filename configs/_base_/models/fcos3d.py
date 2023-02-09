@@ -57,6 +57,8 @@ model = dict(
             type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
         loss_centerness=dict(
             type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0),
+        loss_ttc=dict(
+            type='TTCLoss', time_interval=0.5, scale=10), # scale to clamp the values, the value greater than 10 secs will be clamped to 10 secs
         bbox_coder=dict(type='FCOS3DBBoxCoder', code_size=9),
         norm_on_bbox=True,
         centerness_on_reg=True,
