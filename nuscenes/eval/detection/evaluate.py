@@ -69,7 +69,7 @@ class DetectionEval:
         # Check result file exists.
         assert os.path.exists(result_path), 'Error: The result file does not exist!'
         print(".............result_path.........in evaluate.py...", result_path)
-        exit()
+        # exit()
 
         # Make dirs.
         self.plot_dir = os.path.join(self.output_dir, 'plots')
