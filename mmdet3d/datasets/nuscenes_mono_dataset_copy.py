@@ -580,8 +580,8 @@ class NuScenesMonoDataset_copy(CocoDataset):
         }
 
         mmcv.mkdir_or_exist(jsonfile_prefix)
-        # res_path = osp.join(jsonfile_prefix, 'results_nusc.json')
-        res_path = osp.join("/content", 'results_nusc.json')
+        res_path = osp.join(jsonfile_prefix, 'results_nusc.json')
+        # res_path = osp.join("/content", 'results_nusc.json')
         # res_path = 
         print('Results writes to', res_path)
         mmcv.dump(nusc_submissions, res_path)
