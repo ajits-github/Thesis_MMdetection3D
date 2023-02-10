@@ -707,6 +707,7 @@ class LoadAnnotations3D(LoadAnnotations):
         repr_str += f'{indent_str}with_seg_3d={self.with_seg_3d}, '
         repr_str += f'{indent_str}with_bbox={self.with_bbox}, '
         repr_str += f'{indent_str}with_label={self.with_label}, '
+        repr_str += f'{indent_str}with_relative={self.with_relative}, '  # New
         repr_str += f'{indent_str}with_mask={self.with_mask}, '
         repr_str += f'{indent_str}with_seg={self.with_seg}, '
         repr_str += f'{indent_str}with_bbox_depth={self.with_bbox_depth}, '

@@ -68,6 +68,8 @@ class DetectionEval:
 
         # Check result file exists.
         assert os.path.exists(result_path), 'Error: The result file does not exist!'
+        print(".............result_path.........in evaluate.py...", result_path)
+        exit()
 
         # Make dirs.
         self.plot_dir = os.path.join(self.output_dir, 'plots')
@@ -297,6 +299,8 @@ if __name__ == "__main__":
     parser.add_argument('--verbose', type=int, default=1,
                         help='Whether to print to stdout.')
     args = parser.parse_args()
+
+    print("........args......in evaluate.py in nucenes detection.......", args)
 
     result_path_ = os.path.expanduser(args.result_path)
     output_dir_ = os.path.expanduser(args.output_dir)

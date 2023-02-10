@@ -1,5 +1,6 @@
 # dataset_type = 'NuScenesMonoDataset'
 dataset_type = 'NuScenesMonoDataset_copy'
+# dataset_type = dict(type='NuScenesMonoDataset_copy', version='v1.0-trainval')
 # data_root = 'data/nuscenes/'
 data_root = '/content/drive/MyDrive/Colab Notebooks/Thesis/'
 # data_root = '/content/notebooks/Thesis/'
@@ -76,8 +77,8 @@ data = dict(
     train=dict(
         type=dataset_type,
         data_root=data_root,
-        # ann_file=data_root + 'nuscenes_infos_train_mono3d.coco.json',
-        ann_file=data_root + 'nuscenes_infos_val_mono3d.coco.json',
+        ann_file=data_root + 'nuscenes_infos_train_mono3d.coco.json',
+        # ann_file=data_root + 'nuscenes_infos_val_mono3d.coco.json',
         img_prefix=data_root,
         classes=class_names,
         pipeline=train_pipeline,

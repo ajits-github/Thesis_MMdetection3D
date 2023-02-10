@@ -87,8 +87,8 @@ class NuScenesMonoDataset_copy(CocoDataset):
                  box_type_3d='Camera',
                  eval_version='detection_cvpr_2019',
                  use_valid_flag=False,
-                #  version='v1.0-trainval',
-                 version='v1.0-mini',
+                 version='v1.0-trainval',
+                #  version='v1.0-mini',
                  classes=None,
                  img_prefix='',
                  seg_prefix=None,
@@ -96,7 +96,8 @@ class NuScenesMonoDataset_copy(CocoDataset):
                  test_mode=False,
                  filter_empty_gt=True,
                  file_client_args=dict(backend='disk')):
-        print("..............This is the datatset file...nuscenes_mono_dataset_copy.py..........")
+        print("..............This is the datatset file...nuscenes_mono_dataset_copy.py..........", version)
+        # exit()
         self.ann_file = ann_file
         self.data_root = data_root
         self.img_prefix = img_prefix
