@@ -1590,7 +1590,13 @@ def get_2d_boxes(nusc,
                                 - np.array(pose_rec['translation'])))
         depth_to_anno = np.array(np.array(ann_rec['translation']) 
                                 - np.array(pose_rec['translation']))
-        ttc = depth_to_anno_norm / np.linalg.norm(np.array(relative_velo_global[:2]))
+                                
+        ego_obj_distance_unitvec = depth_to_anno / depth_to_anno_norm
+        relative_velocity_egocomponent = np.dot(relative_velo_global[:2], 
+                                ego_obj_distance_unitvec[:2]).astype(float)
+
+        # ttc = depth_to_anno_norm / np.linalg.norm(np.array(relative_velo_global[:2]))
+        ttc = depth_to_anno_norm / relative_velocity_egocomponent
         ## Added
             
 
