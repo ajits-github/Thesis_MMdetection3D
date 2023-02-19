@@ -4,6 +4,7 @@
 from typing import Any, Dict, List, Tuple
 
 import numpy as np
+import math
 
 from nuscenes.eval.common.data_classes import MetricData, EvalBox
 from nuscenes.eval.common.utils import center_distance
@@ -278,9 +279,17 @@ class TrackingBox(EvalBox):
                  num_pts: int = -1,  # Nbr. LIDAR or RADAR inside the box. Only for gt boxes.
                  tracking_id: str = '',  # Instance id of this object.
                  tracking_name: str = '',  # The class name used in the tracking challenge.
-                 tracking_score: float = -1.0):  # Does not apply to GT.
+                 tracking_score: float = -1.0,  # Does not apply to GT.
+                 time_to_coll_pred: float = 0.0,
+                 time_to_coll_calc: float = 0.0,
+                 sample_data_token: str = "",
+                 sample_annotation_token: str = ""):
 
-        super().__init__(sample_token, translation, size, rotation, velocity, ego_translation, num_pts)
+        super().__init__(sample_token, translation, size, rotation, velocity, ego_translation, num_pts, \
+                time_to_coll_pred=time_to_coll_pred, 
+                time_to_coll_calc=time_to_coll_calc,
+                sample_data_token=sample_data_token,
+                sample_annotation_token=sample_annotation_token)
 
         assert tracking_name is not None, 'Error: tracking_name cannot be empty!'
         assert tracking_name in TRACKING_NAMES, 'Error: Unknown tracking_name %s' % tracking_name
@@ -303,7 +312,10 @@ class TrackingBox(EvalBox):
                 self.num_pts == other.num_pts and
                 self.tracking_id == other.tracking_id and
                 self.tracking_name == other.tracking_name and
-                self.tracking_score == other.tracking_score)
+                self.tracking_score == other.tracking_score and
+                self.time_to_coll_pred == other.time_to_coll_pred and
+                self.time_to_coll_calc == other.time_to_coll_calc and
+                self.sample_data_token == other.sample_data_token)
 
     def serialize(self) -> dict:
         """ Serialize instance into json-friendly format. """
@@ -317,7 +329,11 @@ class TrackingBox(EvalBox):
             'num_pts': self.num_pts,
             'tracking_id': self.tracking_id,
             'tracking_name': self.tracking_name,
-            'tracking_score': self.tracking_score
+            'tracking_score': self.tracking_score,
+            'time_to_coll_pred': self.time_to_coll_pred,
+            'time_to_coll_calc': self.time_to_coll_calc,
+            'sample_data_token': self.sample_data_token,
+            'sample_annotation_token': self.sample_annotation_token
         }
 
     @classmethod
@@ -333,7 +349,12 @@ class TrackingBox(EvalBox):
                    num_pts=-1 if 'num_pts' not in content else int(content['num_pts']),
                    tracking_id=content['tracking_id'],
                    tracking_name=content['tracking_name'],
-                   tracking_score=-1.0 if 'tracking_score' not in content else float(content['tracking_score']))
+                   tracking_score=-1.0 if 'tracking_score' not in content else float(content['tracking_score']),
+                   time_to_coll_pred=float(content['time_to_coll_pred']),
+                   time_to_coll_calc=0.0 if math.isnan(float(content['time_to_coll_calc'])) else float(content['time_to_coll_calc']),
+                   sample_data_token=content['sample_data_token'],
+                   sample_annotation_token="" if 'sample_annotation_token' not in content else content['sample_annotation_token'])
+                   
 
 
 class TrackingMetricDataList:

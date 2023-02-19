@@ -249,6 +249,8 @@ def main():
             if hasattr(datasets[0], 'PALETTE') else None)
     # add an attribute for visualization convenience
     model.CLASSES = datasets[0].CLASSES
+    # print("......args............in train.py....", args)
+    # exit()
     train_model(
         model,
         datasets,

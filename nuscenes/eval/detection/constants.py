@@ -51,16 +51,19 @@ PRETTY_ATTRIBUTE_NAMES = {'pedestrian.moving': 'Ped. Moving',
 #                     'attr_err': '1-acc.'}
 
 # New
-TP_METRICS = ['trans_err', 'scale_err', 'orient_err', 'vel_err', 'attr_err', 'ttc_err']
+TP_METRICS = ['trans_err', 'scale_err', 'orient_err', 'vel_err', 'attr_err', 'ttc_err_pred', 'ttc_err_calc', 'mid_err_pred', 'mid_err_calc']
 
 PRETTY_TP_METRICS = {'trans_err': 'Trans.', 'scale_err': 'Scale', 'orient_err': 'Orient.', 'vel_err': 'Vel.',
-                     'attr_err': 'Attr.', 'ttc_err':'Ttc.'}
+                     'attr_err': 'Attr.', 'ttc_err_pred':'Ttcp.', 'ttc_err_calc':'Ttcal.', 'mid_err_pred':'Midpred.', 'mid_err_calc':'Midcal.'}
 
 TP_METRICS_UNITS = {'trans_err': 'm',
                     'scale_err': '1-IOU',
                     'orient_err': 'rad.',
                     'vel_err': 'm/s',
                     'attr_err': '1-acc.',
-                    'ttc_err':'sec'}
+                    'ttc_err_pred':'sec',
+                    'ttc_err_calc':'sec',
+                    'mid_err_pred':'sec',
+                    'mid_err_calc':'sec'}
 
 ## New

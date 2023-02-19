@@ -2,7 +2,7 @@
 # Code written by Holger Caesar, 2018.
 
 from typing import List, Dict, Any
-
+import torch
 import numpy as np
 from pyquaternion import Quaternion
 
@@ -11,6 +11,7 @@ from nuscenes.utils.data_classes import Box
 # from nuscenes.eval.common.loaders import ego_velocity
 # from nuscenes.eval.detection.evaluate import nusc_
 from nuscenes import NuScenes
+from mmdet3d.models.losses.ttc_loss import TTCLoss
 
 DetectionBox = Any  # Workaround as direct imports lead to cyclic dependencies.
 
@@ -172,7 +173,7 @@ def cummean(x: np.array) -> np.array:
         return np.divide(sum_vals, count_vals, out=np.zeros_like(sum_vals), where=count_vals != 0)
 
 # New
-def l1_distance(nusc: NuScenes, gt_box: EvalBox, pred_box: EvalBox) -> float:
+def l1_distance_pred(gt_box: EvalBox, pred_box: EvalBox) -> float:
     """
     L1 distance between the ttc for gt and pred
     :param gt_ttc: ttc for GT annotation sample.
@@ -186,74 +187,109 @@ def l1_distance(nusc: NuScenes, gt_box: EvalBox, pred_box: EvalBox) -> float:
     #                     gt_box.translation[1] - gt_box.ego_translation[1],
     #                     gt_box.translation[2] - gt_box.ego_translation[2])
     
-    ego_velo = ego_velocity(nusc, gt_box.sample_token)
-    # ego_velo = ""
+    # ego_velo = ego_velocity(nusc, gt_box.sample_token)
+    # # ego_velo = ""
 
-    gt_relative_translation = gt_box.ego_translation
-    gt_relative_velocity = (gt_box.velocity[0] - ego_velo[0],
-                        gt_box.velocity[1] - ego_velo[1])
+    # gt_relative_translation = gt_box.ego_translation
+    # gt_relative_velocity = (gt_box.velocity[0] - ego_velo[0],
+    #                     gt_box.velocity[1] - ego_velo[1])
 
-    pred_relative_translation = pred_box.ego_translation
-    pred_relative_velocity = (pred_box.velocity[0] - ego_velo[0],
-                        pred_box.velocity[1] - ego_velo[1])
+    # pred_relative_translation = pred_box.ego_translation
+    # pred_relative_velocity = (pred_box.velocity[0] - ego_velo[0],
+    #                     pred_box.velocity[1] - ego_velo[1])
     
 
-    gt_time_to_coll = np.linalg.norm(np.array(gt_relative_translation)) / np.linalg.norm(np.array(gt_relative_velocity))
-    pred_time_to_coll = np.linalg.norm(np.array(pred_relative_translation)) / np.linalg.norm(np.array(pred_relative_velocity))
+    # gt_time_to_coll = np.linalg.norm(np.array(gt_relative_translation)) / np.linalg.norm(np.array(gt_relative_velocity))
+    # pred_time_to_coll = np.linalg.norm(np.array(pred_relative_translation)) / np.linalg.norm(np.array(pred_relative_velocity))
 
-    return abs(gt_time_to_coll) - abs(pred_time_to_coll)
+    # print(".........gt_box.................", gt_box)
+    # print(".........pred_box.................", pred_box)
+    ttc_pred_error = abs(gt_box.time_to_coll_calc - pred_box.time_to_coll_pred)
+    # ttc_pred_error = abs(gt_box.time_to_coll_calc) - abs(pred_box.time_to_coll_pred)
+    # ttc_calc_error = abs(gt_box.time_to_coll_calc) - abs(pred_box.time_to_coll_calc)
+    # print("...........ttc_pred_error.............", ttc_pred_error)
+    return ttc_pred_error
 
+def l1_distance_calc(gt_box: EvalBox, pred_box: EvalBox) -> float:
+    """
+    L1 distance between the ttc for gt and pred
+    :param gt_ttc: ttc for GT annotation sample.
+    :param pred_ttc: ttc for Predicted sample.
+    :return: absolute L1 distance.
+    """
+    # ttc_calc_error = abs(gt_box.time_to_coll_calc) - abs(pred_box.time_to_coll_calc)
+    ttc_calc_error = abs(gt_box.time_to_coll_calc - pred_box.time_to_coll_calc)
+    # print("...........ttc_calc_error.............", ttc_calc_error)
+    return ttc_calc_error
+
+def mid_loss_pred(gt_box: EvalBox, pred_box: EvalBox) -> float:
+    ttc_loss = TTCLoss()
+    # print("...........pred_box.time_to_coll_pred......1.......", pred_box.time_to_coll_pred)
+    # print("...........gt_box.time_to_coll_calc.......1......", gt_box.time_to_coll_calc)
+    mid_loss_pred = ttc_loss(torch.tensor([pred_box.time_to_coll_pred]), torch.tensor([gt_box.time_to_coll_calc]))
+    mid_loss_pred = mid_loss_pred.cpu().detach().numpy()
+    return mid_loss_pred
+
+def mid_loss_calc(gt_box: EvalBox, pred_box: EvalBox) -> float:
+    ttc_loss = TTCLoss()
+    # print("...........pred_box.time_to_coll_pred......2.......", pred_box.time_to_coll_calc)
+    # print("...........gt_box.time_to_coll_calc........2.....", gt_box.time_to_coll_calc)
+    mid_loss_calc = ttc_loss(torch.tensor([pred_box.time_to_coll_calc]), torch.tensor([gt_box.time_to_coll_calc]))
+    mid_loss_calc = mid_loss_calc.cpu().detach().numpy()
+    return mid_loss_calc
+
+## New 
 ##########################################  NEW   ######################################
-def ego_velocity(nusc:NuScenes, sample_token: str, max_time_diff: float = 1.5):
-  current = nusc.get('sample', sample_token)
-  has_prev = current['prev'] != ''
-  has_next = current['next'] != ''
+# def ego_velocity(nusc:NuScenes, sample_token: str, max_time_diff: float = 1.5):
+#   current = nusc.get('sample', sample_token)
+#   has_prev = current['prev'] != ''
+#   has_next = current['next'] != ''
 
-  # Cannot estimate velocity for a single sample.
-  if not has_prev and not has_next:
-    raise  Exception("The sample doesn't have previous and next")
-      # return np.array([np.nan, np.nan, np.nan])
+#   # Cannot estimate velocity for a single sample.
+#   if not has_prev and not has_next:
+#     raise  Exception("The sample doesn't have previous and next")
+#       # return np.array([np.nan, np.nan, np.nan])
 
-  if has_prev:
-      first = nusc.get('sample', current['prev'])
-  else:
-      first = current
+#   if has_prev:
+#       first = nusc.get('sample', current['prev'])
+#   else:
+#       first = current
 
-  if has_next:
-      last = nusc.get('sample', current['next'])
-  else:
-      last = current
+#   if has_next:
+#       last = nusc.get('sample', current['next'])
+#   else:
+#       last = current
 
   
-  sd_rec_firstsample = nusc.get('sample_data', first['data']['LIDAR_TOP'])
-#   cs_record_firstsample = nusc.get('calibrated_sensor',
-#                         sd_rec_firstsample['calibrated_sensor_token'])
-  # print(cs_record_firstsample)
-  pose_record_firstsample = nusc.get('ego_pose', sd_rec_firstsample['ego_pose_token'])
+#   sd_rec_firstsample = nusc.get('sample_data', first['data']['LIDAR_TOP'])
+# #   cs_record_firstsample = nusc.get('calibrated_sensor',
+# #                         sd_rec_firstsample['calibrated_sensor_token'])
+#   # print(cs_record_firstsample)
+#   pose_record_firstsample = nusc.get('ego_pose', sd_rec_firstsample['ego_pose_token'])
 
-  sd_rec_lastsample = nusc.get('sample_data', last['data']['LIDAR_TOP'])
-#   cs_record_lastsample = nusc.get('calibrated_sensor',
-#                         sd_rec_lastsample['calibrated_sensor_token'])
-  pose_record_lastsample = nusc.get('ego_pose', sd_rec_lastsample['ego_pose_token'])
+#   sd_rec_lastsample = nusc.get('sample_data', last['data']['LIDAR_TOP'])
+# #   cs_record_lastsample = nusc.get('calibrated_sensor',
+# #                         sd_rec_lastsample['calibrated_sensor_token'])
+#   pose_record_lastsample = nusc.get('ego_pose', sd_rec_lastsample['ego_pose_token'])
 
 
-  pos_last = np.array(pose_record_lastsample['translation'])
-  pos_first = np.array(pose_record_firstsample['translation'])
-  pos_diff = pos_last - pos_first
+#   pos_last = np.array(pose_record_lastsample['translation'])
+#   pos_first = np.array(pose_record_firstsample['translation'])
+#   pos_diff = pos_last - pos_first
 
-  time_last = 1e-6 * last['timestamp']
-  time_first = 1e-6 * first['timestamp']
-  time_diff = time_last - time_first
+#   time_last = 1e-6 * last['timestamp']
+#   time_first = 1e-6 * first['timestamp']
+#   time_diff = time_last - time_first
 
-  if has_next and has_prev:
-      # If doing centered difference, allow for up to double the max_time_diff.
-      max_time_diff *= 2
+#   if has_next and has_prev:
+#       # If doing centered difference, allow for up to double the max_time_diff.
+#       max_time_diff *= 2
 
-  if time_diff > max_time_diff:
-      # If time_diff is too big, don't return an estimate.
-      return np.array([np.nan, np.nan, np.nan])
-  else:
-      return pos_diff / time_diff
+#   if time_diff > max_time_diff:
+#       # If time_diff is too big, don't return an estimate.
+#       return np.array([np.nan, np.nan, np.nan])
+#   else:
+#       return pos_diff / time_diff
 
 ##########################################  NEW   ######################################
 ## New

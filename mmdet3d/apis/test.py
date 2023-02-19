@@ -38,6 +38,8 @@ def single_gpu_test(model,
     for i, data in enumerate(data_loader):
         with torch.no_grad():
             result = model(return_loss=False, rescale=True, **data)
+            # print("..........result....in mmdet3d/apis/test.py...",result)
+            # exit()
 
         if show:
             # Visualize the results of MMDetection3D model

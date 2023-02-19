@@ -27,10 +27,18 @@ class EvalBox(abc.ABC):
                  rotation: Tuple[float, float, float, float] = (0, 0, 0, 0),
                  velocity: Tuple[float, float] = (0, 0),
                  ego_translation: Tuple[float, float, float] = (0, 0, 0),  # Translation to ego vehicle in meters.
-                 num_pts: int = -1):  # Nbr. LIDAR or RADAR inside the box. Only for gt boxes.
+                 num_pts: int = -1, # Nbr. LIDAR or RADAR inside the box. Only for gt boxes.
+                 time_to_coll_pred = 0.0,
+                 time_to_coll_calc = 0.0,
+                 sample_data_token: str = "",
+                 sample_annotation_token: str = ""):
+                
                  
+        # print(".............EvalBox.init................")
         # Assert data for shape and NaNs.
         assert type(sample_token) == str, 'Error: sample_token must be a string!'
+        assert type(sample_data_token) == str, 'Error: sample_data_token must be a string!'
+        assert type(sample_annotation_token) == str, 'Error: sample_annotation_token must be a string!'
 
         assert len(translation) == 3, 'Error: Translation must have 3 elements!'
         assert not np.any(np.isnan(translation)), 'Error: Translation may not be NaN!'
@@ -50,14 +58,26 @@ class EvalBox(abc.ABC):
         assert type(num_pts) == int, 'Error: num_pts must be int!'
         assert not np.any(np.isnan(num_pts)), 'Error: num_pts may not be NaN!'
 
+        assert type(time_to_coll_pred) == float, 'Error: time_to_coll_pred must be a float!'
+        assert not np.any(np.isnan(time_to_coll_pred)), 'Error: time_to_coll_pred may not be NaN!'
+
+        # print("..........time_to_coll_calc........", time_to_coll_calc)
+        # assert type(time_to_coll_calc) == float or not(time_to_coll_calc != time_to_coll_calc), 'Error: time_to_coll_calc must be a float!'
+        # assert not np.any(np.isnan(time_to_coll_calc)), 'Error: time_to_coll_calc may not be NaN!'
+
         # Assign.
         self.sample_token = sample_token
+        self.sample_data_token = sample_data_token
+        self.sample_annotation_token = sample_annotation_token
         self.translation = translation
         self.size = size
         self.rotation = rotation
         self.velocity = velocity
         self.ego_translation = ego_translation
         self.num_pts = num_pts
+        self.time_to_coll_pred = time_to_coll_pred
+        self.time_to_coll_calc = time_to_coll_calc
+
 
     @property
     def ego_dist(self) -> float:
@@ -128,6 +148,13 @@ class EvalBoxes:
 
     def serialize(self) -> dict:
         """ Serialize instance into json-friendly format. """
+        # for key, boxes in self.boxes.items():
+        #     print("...........serialize.......boxes[0].....", boxes[0])
+        #     print("...........key............", key)
+        #     for box in boxes:
+        #         print("...........box.serialize()....", box.serialize())
+        #         exit()
+        # exit()
         return {key: [box.serialize() for box in boxes] for key, boxes in self.boxes.items()}
 
     @classmethod
@@ -138,8 +165,20 @@ class EvalBoxes:
         :param box_cls: The class of the boxes, DetectionBox or TrackingBox.
         """
         eb = cls()
+        # print(".............content..........", content.keys())
         for sample_token, boxes in content.items():
+            # print("...........boxes[0]..........", boxes[0])
             eb.add_boxes(sample_token, [box_cls.deserialize(box) for box in boxes])
+            # for box in boxes:
+            #     print(".......box......eval.common.data_classes.py......", box)
+                # k = box_cls.deserialize(box)
+            #     eb.add_boxes(sample_token, k)
+            # #     # print(".......eb.....eval.common.data_classes.py.......", eb)
+                # print(".......box......eval.common.data_classes.py......", k)
+                # exit()
+        # print(".......eb.len...", type(eb))
+        # print(".......eb....", eb[0])
+        # exit()
         return eb
 
 

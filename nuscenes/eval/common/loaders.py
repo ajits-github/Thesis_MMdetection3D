@@ -3,6 +3,7 @@
 
 import json
 from typing import Dict, Tuple
+import math
 
 import numpy as np
 import tqdm
@@ -16,9 +17,9 @@ from nuscenes.eval.tracking.data_classes import TrackingBox
 from nuscenes.utils.data_classes import Box
 from nuscenes.utils.geometry_utils import points_in_box
 from nuscenes.utils.splits import create_splits_scenes
-from nuscenes.eval.common.utils import ego_velocity
+# from nuscenes.eval.common.utils import ego_velocity
 
-def load_prediction(result_path: str, max_boxes_per_sample: int, box_cls, verbose: bool = False) \
+def load_prediction(result_path: str, max_boxes_per_sample: int, box_cls, verbose: bool = True) \
         -> Tuple[EvalBoxes, Dict]:
     """
     Loads object predictions from file.
@@ -36,6 +37,11 @@ def load_prediction(result_path: str, max_boxes_per_sample: int, box_cls, verbos
                               'See https://www.nuscenes.org/object-detection for more information.'
 
     # Deserialize results and get meta data.
+    # print("........data['results']....", data['results'][0])
+    # print("........data['results']....", data.keys())
+    # print("........data['results']....", data['results']['3e8750f331d7499e9b5123e9eb70f2e2'])
+    # print("........box_cls....", box_cls)
+    # exit()
     all_results = EvalBoxes.deserialize(data['results'], box_cls)
     meta = data['meta']
     if verbose:
@@ -47,6 +53,8 @@ def load_prediction(result_path: str, max_boxes_per_sample: int, box_cls, verbos
         assert len(all_results.boxes[sample_token]) <= max_boxes_per_sample, \
             "Error: Only <= %d boxes per sample allowed!" % max_boxes_per_sample
 
+    # print(".............all_results................", type(all_results))
+    # exit()
     return all_results, meta
 
 
@@ -109,15 +117,55 @@ def load_gt(nusc: NuScenes, eval_split: str, box_cls, verbose: bool = False) -> 
         sample_annotation_tokens = sample['anns']
 
         sample_boxes = []
+
+        # New
+        ego_velo = ego_velocity(nusc, sample_token)
+        sample_rec = nusc.get('sample', sample_token)
+        sd_record = nusc.get('sample_data', sample_rec['data']['LIDAR_TOP'])
+        pose_record = nusc.get('ego_pose', sd_record['ego_pose_token'])
+        # sample_data_token = sd_record['token']
+        # print("............sd_record...........", sd_record)
+        ## New
+
         for sample_annotation_token in sample_annotation_tokens:
 
+            # print("..............sample_token.........", sample)
             sample_annotation = nusc.get('sample_annotation', sample_annotation_token)
+            sample_data_token = get_sample_data_token(nusc, sample_annotation_token)
+            # nusc.render_annotation(sample_annotation_token)
+            # print(".....................",nusc.get('sample_data', "4f5e35aa6c6a426ca945e206fb2f4921"))
+            # exit()
+
+            # get gt ttcs
+            # New
+            translation = sample_annotation['translation']
+            velocity = nusc.box_velocity(sample_annotation['token'])[:2]
+            ego_obj_distance = (translation[0] - pose_record['translation'][0],
+                            translation[1] - pose_record['translation'][1],
+                            translation[2] - pose_record['translation'][2])
+            ego_obj_distance_norm = np.linalg.norm(np.array(ego_obj_distance))
+            ego_obj_distance_unitvec = ego_obj_distance / ego_obj_distance_norm
+            relative_velocity = (velocity[0] - ego_velo[0],
+                            velocity[1] - ego_velo[1])
+            relative_velocity_egocomponent = np.dot(relative_velocity, 
+                            ego_obj_distance_unitvec[:2]).astype(float)
+            ttc_calculated = - ego_obj_distance_norm / relative_velocity_egocomponent
+            if math.isnan(ttc_calculated):
+                ttc_calculated = 0.0
+            # print("..............sample_token.........", sample_token)
+            # print("..............sample_data_token.........", sd_record['token'])
+            # print("..............sample_annotation_token.........", sample_annotation_token)
+            # print("..............ttc_calculated.........", ttc_calculated)
+            # print("..............sample_annotation.........", sample_annotation)
+            # exit()
+            ## New
+
             if box_cls == DetectionBox:
                 # Get label name in detection task and filter unused labels.
                 detection_name = category_to_detection_name(sample_annotation['category_name'])
                 if detection_name is None:
                     continue
-
+                
                 # Get attribute_name.
                 attr_tokens = sample_annotation['attribute_tokens']
                 attr_count = len(attr_tokens)
@@ -131,14 +179,19 @@ def load_gt(nusc: NuScenes, eval_split: str, box_cls, verbose: bool = False) -> 
                 sample_boxes.append(
                     box_cls(
                         sample_token=sample_token,
-                        translation=sample_annotation['translation'],
+                        sample_data_token=sample_data_token,
+                        sample_annotation_token=sample_annotation_token,
+                        # translation=sample_annotation['translation'],
+                        translation=translation,
                         size=sample_annotation['size'],
                         rotation=sample_annotation['rotation'],
-                        velocity=nusc.box_velocity(sample_annotation['token'])[:2],
+                        # velocity=nusc.box_velocity(sample_annotation['token'])[:2],
+                        velocity=velocity,
                         num_pts=sample_annotation['num_lidar_pts'] + sample_annotation['num_radar_pts'],
                         detection_name=detection_name,
                         detection_score=-1.0,  # GT samples do not have a score.
-                        attribute_name=attribute_name
+                        attribute_name=attribute_name,
+                        time_to_coll_calc=ttc_calculated,
                     )
                 )
             elif box_cls == TrackingBox:
@@ -156,14 +209,19 @@ def load_gt(nusc: NuScenes, eval_split: str, box_cls, verbose: bool = False) -> 
                 sample_boxes.append(
                     box_cls(
                         sample_token=sample_token,
-                        translation=sample_annotation['translation'],
+                        sample_data_token=sample_data_token,
+                        sample_annotation_token=sample_annotation_token,
+                        # translation=sample_annotation['translation'],
+                        translation=translation,
                         size=sample_annotation['size'],
                         rotation=sample_annotation['rotation'],
-                        velocity=nusc.box_velocity(sample_annotation['token'])[:2],
+                        # velocity=nusc.box_velocity(sample_annotation['token'])[:2],
+                        velocity=velocity,
                         num_pts=sample_annotation['num_lidar_pts'] + sample_annotation['num_radar_pts'],
                         tracking_id=tracking_id,
                         tracking_name=tracking_name,
-                        tracking_score=-1.0  # GT samples do not have a score.
+                        tracking_score=-1.0,  # GT samples do not have a score.
+                        time_to_coll_calc=ttc_calculated,
                     )
                 )
             else:
@@ -171,11 +229,92 @@ def load_gt(nusc: NuScenes, eval_split: str, box_cls, verbose: bool = False) -> 
 
         all_annotations.add_boxes(sample_token, sample_boxes)
 
-    if verbose:
-        print("Loaded ground truth annotations for {} samples.".format(len(all_annotations.sample_tokens)))
+    # if verbose:
+    print("Loaded ground truth annotations for {} samples.".format(len(all_annotations.sample_tokens)))
 
     return all_annotations
 
+# New
+from nuscenes.utils.geometry_utils import BoxVisibility
+def get_sample_data_token(nusc:NuScenes,
+                     anntoken: str,
+                     box_vis_level: BoxVisibility = BoxVisibility.ANY,
+                     ) -> None:
+    """
+    Render selected annotation.
+    :param anntoken: Sample_annotation token.
+    :param margin: How many meters in each direction to include in LIDAR view.
+    :param view: LIDAR view point.
+    :param box_vis_level: If sample_data is an image, this sets required visibility for boxes.
+    :param out_path: Optional path to save the rendered figure to disk.
+    :param extra_info: Whether to render extra information below camera view.
+    """
+    ann_record = nusc.get('sample_annotation', anntoken)
+    sample_record = nusc.get('sample', ann_record['sample_token'])
+    assert 'LIDAR_TOP' in sample_record['data'].keys(), 'Error: No LIDAR_TOP in data, unable to render.'
+
+    # fig, axes = plt.subplots(1, 2, figsize=(18, 9))
+
+    # Figure out which camera the object is fully visible in (this may return nothing).
+    boxes, cam = [], []
+    cams = [key for key in sample_record['data'].keys() if 'CAM' in key]
+    for cam in cams:
+        _, boxes, _ = nusc.get_sample_data(sample_record['data'][cam], box_vis_level=box_vis_level,
+                                                selected_anntokens=[anntoken])
+        if len(boxes) > 0:
+            break  # We found an image that matches. Let's abort.
+    assert len(boxes) > 0, 'Error: Could not find image where annotation is visible. ' \
+                            'Try using e.g. BoxVisibility.ANY.'
+    assert len(boxes) < 2, 'Error: Found multiple annotations. Something is wrong!'
+
+    cam = sample_record['data'][cam]
+    # print("..........cam........", cam)
+    return cam
+## New
+
+
+# def add_center_dist(nusc: NuScenes,
+#                     eval_boxes: EvalBoxes):
+#     """
+#     Adds the cylindrical (xy) center distance from ego vehicle to each box.
+#     :param nusc: The NuScenes instance.
+#     :param eval_boxes: A set of boxes, either GT or predictions.
+#     :return: eval_boxes augmented with center distances.
+#     """
+#     for sample_token in eval_boxes.sample_tokens:
+#         sample_rec = nusc.get('sample', sample_token)
+#         sd_record = nusc.get('sample_data', sample_rec['data']['LIDAR_TOP'])
+#         pose_record = nusc.get('ego_pose', sd_record['ego_pose_token'])
+
+#         # New
+#         # ego_velo = ego_velocity(nusc, sample['token'])
+#         ego_velo = ego_velocity(nusc, sample_token)
+#         ## New
+
+#         for box in eval_boxes[sample_token]:
+#             # Both boxes and ego pose are given in global coord system, so distance can be calculated directly.
+#             # Note that the z component of the ego pose is 0.
+#             # print("...............box......in add_center_dist.......", box)
+#             # exit()
+#             ego_translation = (box.translation[0] - pose_record['translation'][0],
+#                                box.translation[1] - pose_record['translation'][1],
+#                                box.translation[2] - pose_record['translation'][2])
+            
+#             # New
+#             relative_velocity = (box.velocity[0] - ego_velo[0],
+#                                 box.velocity[1] - ego_velo[1])
+#             ## New
+
+#             if isinstance(box, DetectionBox) or isinstance(box, TrackingBox):
+#                 box.ego_obj_distance = ego_translation
+#                 # New
+#                 box.relative_velo = relative_velocity
+#                 box.time_to_coll = np.linalg.norm(np.array(ego_translation)) / np.linalg.norm(np.array(relative_velocity))
+#                 ## New
+#             else:
+#                 raise NotImplementedError
+
+#     return eval_boxes
 
 def add_center_dist(nusc: NuScenes,
                     eval_boxes: EvalBoxes):
@@ -190,33 +329,19 @@ def add_center_dist(nusc: NuScenes,
         sd_record = nusc.get('sample_data', sample_rec['data']['LIDAR_TOP'])
         pose_record = nusc.get('ego_pose', sd_record['ego_pose_token'])
 
-        # New
-        # ego_velo = ego_velocity(nusc, sample['token'])
-        ego_velo = ego_velocity(nusc, sample_token)
-        ## New
-
         for box in eval_boxes[sample_token]:
             # Both boxes and ego pose are given in global coord system, so distance can be calculated directly.
             # Note that the z component of the ego pose is 0.
             ego_translation = (box.translation[0] - pose_record['translation'][0],
                                box.translation[1] - pose_record['translation'][1],
                                box.translation[2] - pose_record['translation'][2])
-            
-            # New
-            relative_velocity = (box.velocity[0] - ego_velo[0],
-                                box.velocity[1] - ego_velo[1])
-            ## New
-
             if isinstance(box, DetectionBox) or isinstance(box, TrackingBox):
-                box.ego_obj_distance = ego_translation
-                # New
-                box.relative_velo = relative_velocity
-                box.time_to_coll = np.linalg.norm(np.array(ego_translation)) / np.linalg.norm(np.array(relative_velocity))
-                ## New
+                box.ego_translation = ego_translation
             else:
                 raise NotImplementedError
 
     return eval_boxes
+
 
 def filter_eval_boxes(nusc: NuScenes,
                       eval_boxes: EvalBoxes,
@@ -297,3 +422,59 @@ def _get_box_class_field(eval_boxes: EvalBoxes) -> str:
         raise Exception('Error: Invalid box type: %s' % box)
 
     return class_field
+
+# New
+##########################################  NEW   ######################################
+def ego_velocity(nusc:NuScenes, sample_token: str, max_time_diff: float = 1.5):
+  current = nusc.get('sample', sample_token)
+  has_prev = current['prev'] != ''
+  has_next = current['next'] != ''
+
+  # Cannot estimate velocity for a single sample.
+  if not has_prev and not has_next:
+    raise  Exception("The sample doesn't have previous and next")
+      # return np.array([np.nan, np.nan, np.nan])
+
+  if has_prev:
+      first = nusc.get('sample', current['prev'])
+  else:
+      first = current
+
+  if has_next:
+      last = nusc.get('sample', current['next'])
+  else:
+      last = current
+
+  
+  sd_rec_firstsample = nusc.get('sample_data', first['data']['LIDAR_TOP'])
+#   cs_record_firstsample = nusc.get('calibrated_sensor',
+#                         sd_rec_firstsample['calibrated_sensor_token'])
+  # print(cs_record_firstsample)
+  pose_record_firstsample = nusc.get('ego_pose', sd_rec_firstsample['ego_pose_token'])
+
+  sd_rec_lastsample = nusc.get('sample_data', last['data']['LIDAR_TOP'])
+#   cs_record_lastsample = nusc.get('calibrated_sensor',
+#                         sd_rec_lastsample['calibrated_sensor_token'])
+  pose_record_lastsample = nusc.get('ego_pose', sd_rec_lastsample['ego_pose_token'])
+
+
+  pos_last = np.array(pose_record_lastsample['translation'])
+  pos_first = np.array(pose_record_firstsample['translation'])
+  pos_diff = pos_last - pos_first
+
+  time_last = 1e-6 * last['timestamp']
+  time_first = 1e-6 * first['timestamp']
+  time_diff = time_last - time_first
+
+  if has_next and has_prev:
+      # If doing centered difference, allow for up to double the max_time_diff.
+      max_time_diff *= 2
+
+  if time_diff > max_time_diff:
+      # If time_diff is too big, don't return an estimate.
+      return np.array([np.nan, np.nan, np.nan])
+  else:
+      return pos_diff / time_diff
+
+##########################################  NEW   ######################################
+## New

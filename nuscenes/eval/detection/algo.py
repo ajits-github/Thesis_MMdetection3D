@@ -7,7 +7,9 @@ import numpy as np
 
 from nuscenes import NuScenes
 from nuscenes.eval.common.data_classes import EvalBoxes
-from nuscenes.eval.common.utils import center_distance, scale_iou, yaw_diff, velocity_l2, attr_acc, cummean, l1_distance
+from nuscenes.eval.common.utils import center_distance, scale_iou, yaw_diff, \
+    velocity_l2, attr_acc, cummean, l1_distance_calc, l1_distance_pred, \
+        mid_loss_pred, mid_loss_calc
 from nuscenes.eval.detection.data_classes import DetectionMetricData
 
 
@@ -16,7 +18,8 @@ def accumulate(nusc: NuScenes, gt_boxes: EvalBoxes,
                class_name: str,
                dist_fcn: Callable,
                dist_th: float,
-               verbose: bool = False) -> DetectionMetricData:
+               verbose: bool = False,
+               ) -> DetectionMetricData:
     """
     Average Precision over predefined different recall thresholds for a single distance threshold.
     The recall/conf thresholds and other raw metrics will be used in secondary metrics.
@@ -46,9 +49,12 @@ def accumulate(nusc: NuScenes, gt_boxes: EvalBoxes,
     pred_boxes_list = [box for box in pred_boxes.all if box.detection_name == class_name]
     pred_confs = [box.detection_score for box in pred_boxes_list]
 
+    # print(",............pred_boxes_list.........", pred_boxes_list)
+    # exit()
+
     if verbose:
         print("Found {} PRED of class {} out of {} total across {} samples.".
-              format(len(pred_confs), class_name, len(pred_boxes.all), len(pred_boxes.sample_tokens)))
+                format(len(pred_confs), class_name, len(pred_boxes.all), len(pred_boxes.sample_tokens)))
 
     # Sort by confidence.
     sortind = [i for (v, i) in sorted((v, i) for (i, v) in enumerate(pred_confs))][::-1]
@@ -57,6 +63,7 @@ def accumulate(nusc: NuScenes, gt_boxes: EvalBoxes,
     tp = []  # Accumulator of true positives.
     fp = []  # Accumulator of false positives.
     conf = []  # Accumulator of confidences.
+    result_temp = []
 
     # match_data holds the extra metrics we calculate for each match.
     match_data = {'trans_err': [],
@@ -65,7 +72,10 @@ def accumulate(nusc: NuScenes, gt_boxes: EvalBoxes,
                   'orient_err': [],
                   'attr_err': [],
                   'conf': [],
-                  'ttc_err': []}
+                  'ttc_err_pred': [],
+                  'ttc_err_calc': [],
+                  'mid_err_pred': [],
+                  'mid_err_calc': [],}
 
     # ---------------------------------------------
     # Match and accumulate match data.
@@ -109,7 +119,10 @@ def accumulate(nusc: NuScenes, gt_boxes: EvalBoxes,
             match_data['orient_err'].append(yaw_diff(gt_box_match, pred_box, period=period))
 
             # New
-            match_data['ttc_err'].append(l1_distance(nusc, gt_box_match,pred_box))
+            match_data['ttc_err_pred'].append(l1_distance_pred(gt_box_match, pred_box))
+            match_data['ttc_err_calc'].append(l1_distance_calc(gt_box_match, pred_box))
+            match_data['mid_err_pred'].append(mid_loss_pred(gt_box_match, pred_box))
+            match_data['mid_err_calc'].append(mid_loss_calc(gt_box_match, pred_box))
             # print(".......HELLLLLLLLOOOOOOOOOO................\n")
             # exit()
             ## New
@@ -171,7 +184,10 @@ def accumulate(nusc: NuScenes, gt_boxes: EvalBoxes,
                                scale_err=match_data['scale_err'],
                                orient_err=match_data['orient_err'],
                                attr_err=match_data['attr_err'],
-                               ttc_err=match_data['ttc_err']) # New ##
+                               ttc_err_pred=match_data['ttc_err_pred'], # New ##
+                               ttc_err_calc=match_data['ttc_err_calc'], # New ##
+                               mid_err_pred=match_data['mid_err_pred'], # New ##
+                               mid_err_calc=match_data['mid_err_calc']) # New ##
 
 
 def calc_ap(md: DetectionMetricData, min_recall: float, min_precision: float) -> float:

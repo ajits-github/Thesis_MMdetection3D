@@ -630,6 +630,11 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
         assert len(cls_scores) == len(bbox_preds) == len(dir_cls_preds) == \
             len(centernesses) == len(attr_preds) == len(ttc)
         num_levels = len(cls_scores)
+        # print("\n................ttc.len.........",len(ttc))
+        # print("\n................ttc[0]..........",ttc[0].size())
+        # print("\n................len(ttc[0][0][0])..........",len(ttc[0][0][0]))
+        # print("\n................ttc[0][0][0]..........",ttc[0][0][0])
+        # print("\n................ttc[0][0][0][0]..........",ttc[0][0][0][0])
 
         featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]
         mlvl_points = self.get_points(featmap_sizes, bbox_preds[0].dtype,
@@ -670,6 +675,9 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
             ttc_pred_list = [
                 ttc[i][img_id].detach() for i in range(num_levels)
             ]
+            # print("........ttc_pred_list............",ttc_pred_list)
+            # exit()
+
             input_meta = img_metas[img_id]
             det_bboxes = self._get_bboxes_single(
                 cls_score_list, bbox_pred_list, dir_cls_pred_list,
@@ -732,11 +740,18 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
             scores = cls_score.permute(1, 2, 0).reshape(
                 -1, self.cls_out_channels).sigmoid()
             dir_cls_pred = dir_cls_pred.permute(1, 2, 0).reshape(-1, 2)
+            # print(".....dir_cls_pred.size..........before....", dir_cls_pred.size())
             dir_cls_score = torch.max(dir_cls_pred, dim=-1)[1]
             attr_pred = attr_pred.permute(1, 2, 0).reshape(-1, self.num_attrs)
             attr_score = torch.max(attr_pred, dim=-1)[1]
+            # print(".............centerness.len......before.........", centerness.size())
+            # print(".............ttc.size.........before......", ttc.size())
+            # print(".............centerness......before..........", centerness)
+            # print(".............ttc......before..........", ttc)
             centerness = centerness.permute(1, 2, 0).reshape(-1).sigmoid()
+            # ttc = ttc.permute(1, 2, 0).reshape(-1).softmax(dim=0)
             ttc = ttc.permute(1, 2, 0).reshape(-1)
+
 
             bbox_pred = bbox_pred.permute(1, 2,
                                           0).reshape(-1,
@@ -754,6 +769,10 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
                 ttc = ttc[topk_inds]
                 dir_cls_score = dir_cls_score[topk_inds]
                 attr_score = attr_score[topk_inds]
+            # print(".....dir_cls_pred.size..........after....", dir_cls_pred.size())
+            # print("............topk_inds.size....after...........",topk_inds.size() )
+            # print("............ttc......after..........",ttc)
+            # print("............ttc.size.......after........",ttc.size())
             # change the offset to actual center predictions
             bbox_pred[:, :2] = points - bbox_pred[:, :2]
             if rescale:
@@ -794,12 +813,23 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
         mlvl_ttc = torch.cat(mlvl_ttc)
         # no scale_factors in box3d_multiclass_nms
         # Then we multiply it from outside
+        # print("...........mlvl_attr_scores.size...........",mlvl_attr_scores.size())
         mlvl_nms_scores = mlvl_scores * mlvl_centerness[:, None]
+
+        # print("...........mlvl_dir_scores.size...........",mlvl_dir_scores.size())
+        # print("...........mlvl_ttc.size...........",mlvl_ttc.size())
+        # results = box3d_multiclass_nms(mlvl_bboxes, mlvl_bboxes_for_nms,
+        #                                mlvl_nms_scores, cfg.score_thr,
+        #                                cfg.max_per_img, cfg, mlvl_dir_scores,
+        #                                mlvl_attr_scores)
+
         results = box3d_multiclass_nms(mlvl_bboxes, mlvl_bboxes_for_nms,
                                        mlvl_nms_scores, cfg.score_thr,
                                        cfg.max_per_img, cfg, mlvl_dir_scores,
-                                       mlvl_attr_scores)
-        bboxes, scores, labels, dir_scores, attrs = results
+                                       mlvl_attr_scores, mlvl_ttc=mlvl_ttc)
+
+        # print("...results...........", results[0])
+        bboxes, scores, labels, dir_scores, attrs, ttc = results
         attrs = attrs.to(labels.dtype)  # change data type to int
         bboxes = input_meta['box_type_3d'](
             bboxes, box_dim=self.bbox_code_size, origin=(0.5, 0.5, 0.5))
@@ -807,10 +837,15 @@ class FCOSMono3DHead(AnchorFreeMono3DHead):
         # Due to the ground truth centers2d are the gravity center of objects
         # v0.10.0 fix inplace operation to the input tensor of cam_box3d
         # So here we also need to add origin=(0.5, 0.5, 0.5)
+
+        # print("...........ttc............",ttc)
+        # print("...........ttc.size...........",ttc.size())
+        # print("...........attrs.size...........",attrs.size())
+
         if not self.pred_attrs:
             attrs = None
-
-        return bboxes, scores, labels, attrs
+        # exit()
+        return bboxes, scores, labels, attrs, ttc
 
     @staticmethod
     def pts2Dto3D(points, view):

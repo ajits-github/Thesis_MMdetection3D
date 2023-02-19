@@ -1596,7 +1596,7 @@ def get_2d_boxes(nusc,
                                 ego_obj_distance_unitvec[:2]).astype(float)
 
         # ttc = depth_to_anno_norm / np.linalg.norm(np.array(relative_velo_global[:2]))
-        ttc = depth_to_anno_norm / relative_velocity_egocomponent
+        ttc = - depth_to_anno_norm / relative_velocity_egocomponent
         ## Added
             
 
@@ -1648,9 +1648,10 @@ def get_2d_boxes(nusc,
             min_x, min_y, max_x, max_y = final_coords
 
         # Generate dictionary record to be included in the .json file.
+        # repro_rec = generate_record(ann_rec, min_x, min_y, max_x, max_y,
+        #                             sample_data_token, sd_rec['filename'])
         repro_rec = generate_record(ann_rec, min_x, min_y, max_x, max_y,
-                                    sample_data_token, sd_rec['filename'])
-
+                                    s_rec['token'], sample_data_token, sd_rec['filename'])
         # print("velocity_global.....", velocity_global.reshape(-1, 3))
 
 
@@ -1769,8 +1770,10 @@ def post_process_coords(
         return None
 
 
+# def generate_record(ann_rec: dict, x1: float, y1: float, x2: float, y2: float,
+#                     sample_data_token: str, filename: str) -> OrderedDict:
 def generate_record(ann_rec: dict, x1: float, y1: float, x2: float, y2: float,
-                    sample_data_token: str, filename: str) -> OrderedDict:
+                    sample_token: str, sample_data_token: str, filename: str) -> OrderedDict:
     """Generate one 2D annotation record given various information on top of
     the 2D bounding box coordinates.
 
@@ -1818,8 +1821,11 @@ def generate_record(ann_rec: dict, x1: float, y1: float, x2: float, y2: float,
     repro_rec['bbox_corners'] = [x1, y1, x2, y2]
     repro_rec['filename'] = filename
 
+    coco_rec['sample_token'] = sample_token
     coco_rec['file_name'] = filename
     coco_rec['image_id'] = sample_data_token
+    coco_rec['sample_data_token'] = sample_data_token
+    coco_rec['annotation_token'] = ann_rec['token']
     coco_rec['area'] = (y2 - y1) * (x2 - x1)
 
     if repro_rec['category_name'] not in NuScenesDataset.NameMapping:

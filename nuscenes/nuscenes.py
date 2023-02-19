@@ -1508,6 +1508,8 @@ class NuScenesExplorer:
         assert len(boxes) < 2, 'Error: Found multiple annotations. Something is wrong!'
 
         cam = sample_record['data'][cam]
+        # print("..........cam........", cam)
+    
 
         # Plot LIDAR view.
         lidar = sample_record['data']['LIDAR_TOP']
@@ -1546,12 +1548,22 @@ class NuScenesExplorer:
             pose_record = self.nusc.get('ego_pose', sample_data_record['ego_pose_token'])
             # dist = np.linalg.norm(np.array(pose_record['translation']) - np.array(ann_record['translation']))
             dist = np.linalg.norm(np.array(ann_record['translation']) - np.array(pose_record['translation']))
+            
             # Added
             # s_rec = self.get('sample', sample_data_record['sample_token'])
             ego_velo = self.ego_velocity(sample_record['token'])
             velocity_global = np.array(self.nusc.box_velocity(ann_record['token']))
             relative_velo_global = velocity_global - ego_velo
-            ttc = dist / np.linalg.norm(np.array(relative_velo_global[:2]))
+            depth_to_anno_norm = np.array(np.linalg.norm(np.array(ann_record['translation']) 
+                                - np.array(pose_record['translation'])))
+            depth_to_anno = np.array(np.array(ann_record['translation']) 
+                                - np.array(pose_record['translation']))
+                                
+            ego_obj_distance_unitvec = depth_to_anno / depth_to_anno_norm
+            relative_velocity_egocomponent = np.dot(relative_velo_global[:2], 
+                                ego_obj_distance_unitvec[:2]).astype(float)
+            # ttc = dist / np.linalg.norm(np.array(relative_velo_global[:2]))
+            ttc = - depth_to_anno_norm / relative_velocity_egocomponent
             print(".............ttc...........", ttc)
             ## Added
 

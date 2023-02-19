@@ -3,6 +3,7 @@ import copy
 import tempfile
 import warnings
 from os import path as osp
+import math
 
 import mmcv
 import numpy as np
@@ -21,7 +22,7 @@ import inspect
 from nuscenes import NuScenes
 
 @DATASETS.register_module()
-class NuScenesMonoDataset_copy(CocoDataset):
+class NuScenesMonoDataset_copy1(CocoDataset):
     r"""Monocular 3D detection on NuScenes Dataset.
 
     This class serves as the API for experiments on the NuScenes Dataset.
@@ -74,7 +75,10 @@ class NuScenesMonoDataset_copy(CocoDataset):
         'orient_err': 'mAOE',
         'vel_err': 'mAVE',
         'attr_err': 'mAAE',
-        'ttc_err': 'mATT'
+        'ttc_err_pred': 'mATTP',
+        'ttc_err_calc': 'mATTC',
+        'mid_err_pred': 'mAMiP',
+        'mid_err_calc': 'mAMiC',
     }
 
     def __init__(self,
@@ -96,7 +100,7 @@ class NuScenesMonoDataset_copy(CocoDataset):
                  test_mode=False,
                  filter_empty_gt=True,
                  file_client_args=dict(backend='disk')):
-        print("..............This is the datatset file...nuscenes_mono_dataset_copy.py..........", version)
+        print("..............This is the datatset file...nuscenes_mono_dataset_copy1.py..........", version)
         # exit()
         self.ann_file = ann_file
         self.data_root = data_root
@@ -380,7 +384,7 @@ class NuScenesMonoDataset_copy(CocoDataset):
                 return AttrMapping_rev2[attr_idx]
             else:
                 # return NuScenesMonoDataset.DefaultAttribute[label_name]
-                return NuScenesMonoDataset_copy.DefaultAttribute[label_name]
+                return NuScenesMonoDataset_copy1.DefaultAttribute[label_name]
         elif label_name == 'pedestrian':
             if AttrMapping_rev2[attr_idx] == 'pedestrian.moving' or \
                 AttrMapping_rev2[attr_idx] == 'pedestrian.standing' or \
@@ -389,16 +393,16 @@ class NuScenesMonoDataset_copy(CocoDataset):
                 return AttrMapping_rev2[attr_idx]
             else:
                 # return NuScenesMonoDataset.DefaultAttribute[label_name]
-                return NuScenesMonoDataset_copy.DefaultAttribute[label_name]
+                return NuScenesMonoDataset_copy1.DefaultAttribute[label_name]
         elif label_name == 'bicycle' or label_name == 'motorcycle':
             if AttrMapping_rev2[attr_idx] == 'cycle.with_rider' or \
                     AttrMapping_rev2[attr_idx] == 'cycle.without_rider':
                 return AttrMapping_rev2[attr_idx]
             else:
-                return NuScenesMonoDataset_copy.DefaultAttribute[label_name]
+                return NuScenesMonoDataset_copy1.DefaultAttribute[label_name]
                 # return NuScenesMonoDataset.DefaultAttribute[label_name]
         else:
-                return NuScenesMonoDataset_copy.DefaultAttribute[label_name]
+                return NuScenesMonoDataset_copy1.DefaultAttribute[label_name]
             # return NuScenesMonoDataset.DefaultAttribute[label_name]
 
     def _format_bbox(self, results, jsonfile_prefix=None):
@@ -412,7 +416,7 @@ class NuScenesMonoDataset_copy(CocoDataset):
 
         Returns:
             str: Path of the output json file.
-        """
+        # """
         nusc_annos = {}
         mapped_class_names = self.CLASSES
 
@@ -426,31 +430,35 @@ class NuScenesMonoDataset_copy(CocoDataset):
             if sample_id % CAM_NUM == 0:
                 boxes_per_frame = []
                 attrs_per_frame = []
+                ttcs_per_frame = []
 
             # need to merge results from images of the same sample
             annos = []
             # print('.............det............in nuscenes_mono_dataset_copy.py......\n',det)
             # exit()
-            boxes, attrs = output_to_nusc_box(det)
+            boxes, attrs, ttcs = output_to_nusc_box(det)
             sample_token = self.data_infos[sample_id]['token']
 
             # New
             sample_data_token = self.data_infos[sample_id]['id']
+            file_name = self.data_infos[sample_id]['file_name']
             camera_intrinsic = self.data_infos[sample_id]['cam_intrinsic']
             ego2global_translation = self.data_infos[sample_id]['ego2global_translation']
             ego2global_rotation = self.data_infos[sample_id]['ego2global_rotation']
             cam2ego_translation = self.data_infos[sample_id]['cam2ego_translation']
-            cam2ego_rotation = self.data_infos[sample_id]['cam2ego_rotation']            
+            cam2ego_rotation = self.data_infos[sample_id]['cam2ego_rotation']           
             ## New
 
-            boxes, attrs = cam_nusc_box_to_global(self.data_infos[sample_id],
+            boxes, attrs, ttcs = cam_nusc_box_to_global(self.data_infos[sample_id],
                                                   boxes, attrs,
                                                   mapped_class_names,
                                                   self.eval_detection_configs,
-                                                  self.eval_version)
+                                                  self.eval_version,
+                                                  ttcs=ttcs)
 
             boxes_per_frame.extend(boxes)
             attrs_per_frame.extend(attrs)
+            ttcs_per_frame.extend(ttcs)
             # Remove redundant predictions caused by overlap of images
             if (sample_id + 1) % CAM_NUM != 0:
                 continue
@@ -473,23 +481,31 @@ class NuScenesMonoDataset_copy(CocoDataset):
             nms_cfg = Config(nms_cfg)
             cam_boxes3d_for_nms = xywhr2xyxyr(cam_boxes3d.bev)
             boxes3d = cam_boxes3d.tensor
+            # print("...............labels...............", labels)
+            # print("...............attrs...............", attrs)
             # generate attr scores from attr labels
             attrs = labels.new_tensor([attr for attr in attrs_per_frame])
-            boxes3d, scores, labels, attrs = box3d_multiclass_nms(
+            ttcs = torch.tensor(ttcs_per_frame)
+            # print("............attrs...........", attrs)
+            # print("............ttcs...........", ttcs)
+            # print("............ttcs...........", ttcs)
+
+            boxes3d, scores, labels, attrs, ttcs = box3d_multiclass_nms(
                 boxes3d,
                 cam_boxes3d_for_nms,
                 scores,
                 nms_cfg.score_thr,
                 nms_cfg.max_per_frame,
                 nms_cfg,
-                mlvl_attr_scores=attrs)
+                mlvl_attr_scores=attrs,
+                mlvl_ttc=ttcs)
             cam_boxes3d = CameraInstance3DBoxes(boxes3d, box_dim=9)
-            det = bbox3d2result(cam_boxes3d, scores, labels, attrs)
-            boxes, attrs = output_to_nusc_box(det)
-            boxes, attrs = cam_nusc_box_to_global(
+            det = bbox3d2result(cam_boxes3d, scores, labels, attrs, ttcs)
+            boxes, attrs, ttcs = output_to_nusc_box(det)
+            boxes, attrs, ttcs = cam_nusc_box_to_global(
                 self.data_infos[sample_id + 1 - CAM_NUM], boxes, attrs,
                 mapped_class_names, self.eval_detection_configs,
-                self.eval_version)
+                self.eval_version, ttcs=ttcs)
 
             # New
             ego_velo = ego_velocity(nusc, sample_token)
@@ -504,6 +520,7 @@ class NuScenesMonoDataset_copy(CocoDataset):
 
                 name = mapped_class_names[box.label]
                 attr = self.get_attr_name(attrs[i], name)
+                ttc = ttcs[i]
                 # nusc_anno = dict(
                 #     sample_token=sample_token,
                 #     translation=box.center.tolist(),
@@ -524,14 +541,26 @@ class NuScenesMonoDataset_copy(CocoDataset):
                 rotation = box.orientation.elements.tolist()
                 velocity = box.velocity[:2].tolist()
                 detection_score = box.score
+                time_to_coll_pred=ttc
 
                 ego_obj_distance = (translation[0] - pose_record['translation'][0],
                                translation[1] - pose_record['translation'][1],
                                translation[2] - pose_record['translation'][2])
-                ego_obj_distance = np.linalg.norm(np.array(ego_obj_distance))
+                ego_obj_distance_norm = np.linalg.norm(np.array(ego_obj_distance))
                 relative_velocity = (box.velocity[0] - ego_velo[0],
                                 box.velocity[1] - ego_velo[1])
-                ttc = ego_obj_distance / np.linalg.norm(np.array(relative_velocity))
+
+                ego_obj_distance_unitvec = ego_obj_distance / ego_obj_distance_norm
+                # relative_velocity_egocomponent = torch.dot(torch.tensor(relative_velocity, dtype=torch.double), 
+                #                 torch.tensor(ego_obj_distance_unitvec[:2], dtype=torch.double))
+
+                relative_velocity_egocomponent = np.dot(relative_velocity, 
+                                ego_obj_distance_unitvec[:2]).astype(float)
+
+                # ttc_calculated = ego_obj_distance / np.linalg.norm(np.array(relative_velocity))
+                ttc_calculated = - ego_obj_distance_norm / relative_velocity_egocomponent
+                if math.isnan(ttc_calculated):
+                    ttc_calculated = 0.0
 
                 from tools.data_converter.nuscenes_dataset_prep import points_cam2img
 
@@ -548,17 +577,31 @@ class NuScenesMonoDataset_copy(CocoDataset):
                 center2d = points_cam2img(center3d, camera_intrinsic, with_depth=True)
                 center2d = center2d.squeeze().tolist()
 
+                # nusc_anno = dict(
+                #     sample_token=sample_token,
+                #     sample_data_token=sample_data_token,
+                #     translation=translation,
+                #     ego_obj_distance=ego_obj_distance,
+                #     center2d=center2d,
+                #     size=size,
+                #     rotation=rotation,
+                #     velocity=velocity,
+                #     relative_velo=relative_velocity,
+                #     time_to_coll=ttc,
+                #     detection_name=name,
+                #     detection_score=detection_score,
+                #     attribute_name=attr)
                 nusc_anno = dict(
+                    file_name=file_name,
                     sample_token=sample_token,
                     sample_data_token=sample_data_token,
                     translation=translation,
-                    ego_obj_distance=ego_obj_distance,
                     center2d=center2d,
                     size=size,
                     rotation=rotation,
                     velocity=velocity,
-                    relative_velo=relative_velocity,
-                    time_to_coll=ttc,
+                    time_to_coll_pred=time_to_coll_pred,
+                    time_to_coll_calc=ttc_calculated,
                     detection_name=name,
                     detection_score=detection_score,
                     attribute_name=attr)
@@ -580,9 +623,12 @@ class NuScenesMonoDataset_copy(CocoDataset):
         }
 
         mmcv.mkdir_or_exist(jsonfile_prefix)
-        # res_path = osp.join(jsonfile_prefix, 'results_nusc.json')
-        res_path = osp.join("/content", 'results_nusc.json')
-        # res_path = 
+
+        res_path = osp.join(jsonfile_prefix, 'results_nusc.json')
+        # res_path = osp.join("/content", 'results_nusc.json')
+        # res_path = "/content/results_nusc1.json"
+        # res_path = osp.join("/content/drive/MyDrive/Colab Notebooks/Thesis/mmdetection3d/json_result", 'results_nusc.json')
+
         print('Results writes to', res_path)
         mmcv.dump(nusc_submissions, res_path)
         return res_path
@@ -670,7 +716,7 @@ class NuScenesMonoDataset_copy(CocoDataset):
             jsonfile_prefix = osp.join(tmp_dir.name, 'results')
         else:
             tmp_dir = None
-
+        # print("............results...........",results)
         # currently the output prediction results could be in two formats
         # 1. list of dict('boxes_3d': ..., 'scores_3d': ..., 'labels_3d': ...)
         # 2. list of dict('pts_bbox' or 'img_bbox':
@@ -965,6 +1011,8 @@ def output_to_nusc_box(detection):
     attrs = None
     if 'attrs_3d' in detection:
         attrs = detection['attrs_3d'].numpy()
+    if 'ttc' in detection:
+        ttc = detection['ttc'].numpy()
 
     box_gravity_center = box3d.gravity_center.numpy()
     box_dims = box3d.dims.numpy()
@@ -988,7 +1036,7 @@ def output_to_nusc_box(detection):
             score=scores[i],
             velocity=velocity)
         box_list.append(box)
-    return box_list, attrs
+    return box_list, attrs, ttc
 
 
 def cam_nusc_box_to_global(info,
@@ -996,7 +1044,8 @@ def cam_nusc_box_to_global(info,
                            attrs,
                            classes,
                            eval_configs,
-                           eval_version='detection_cvpr_2019'):
+                           eval_version='detection_cvpr_2019',
+                           ttcs=None):
     """Convert the box from camera to global coordinate.
 
     Args:
@@ -1014,7 +1063,8 @@ def cam_nusc_box_to_global(info,
     """
     box_list = []
     attr_list = []
-    for (box, attr) in zip(boxes, attrs):
+    ttc_list = []
+    for (box, attr, ttc) in zip(boxes, attrs, ttcs):
         # Move box to ego vehicle coord system
         box.rotate(pyquaternion.Quaternion(info['cam2ego_rotation']))
         box.translate(np.array(info['cam2ego_translation']))
@@ -1029,7 +1079,8 @@ def cam_nusc_box_to_global(info,
         box.translate(np.array(info['ego2global_translation']))
         box_list.append(box)
         attr_list.append(attr)
-    return box_list, attr_list
+        ttc_list.append(ttc)
+    return box_list, attr_list, ttc_list
 
 
 def global_nusc_box_to_cam(info,
@@ -1081,11 +1132,17 @@ def nusc_box_to_cam_box3d(boxes):
         tuple (:obj:`CameraInstance3DBoxes` | torch.Tensor | torch.Tensor):
             Converted 3D bounding boxes, scores and labels.
     """
-    locs = torch.Tensor([b.center for b in boxes]).view(-1, 3)
-    dims = torch.Tensor([b.wlh for b in boxes]).view(-1, 3)
-    rots = torch.Tensor([b.orientation.yaw_pitch_roll[0]
-                         for b in boxes]).view(-1, 1)
-    velocity = torch.Tensor([b.velocity[0::2] for b in boxes]).view(-1, 2)
+    # locs = torch.Tensor([b.center for b in boxes]).view(-1, 3)
+    # dims = torch.Tensor([b.wlh for b in boxes]).view(-1, 3)
+    # rots = torch.Tensor([b.orientation.yaw_pitch_roll[0]
+    #                      for b in boxes]).view(-1, 1)
+    # velocity = torch.Tensor([b.velocity[0::2] for b in boxes]).view(-1, 2)
+
+    locs = torch.Tensor(np.array([b.center for b in boxes])).view(-1, 3)
+    dims = torch.Tensor(np.array([b.wlh for b in boxes])).view(-1, 3)
+    rots = torch.Tensor(np.array([b.orientation.yaw_pitch_roll[0]
+                         for b in boxes])).view(-1, 1)
+    velocity = torch.Tensor(np.array([b.velocity[0::2] for b in boxes])).view(-1, 2)
 
     # convert nusbox to cambox convention
     dims[:, [0, 1, 2]] = dims[:, [1, 2, 0]]
@@ -1100,3 +1157,8 @@ def nusc_box_to_cam_box3d(boxes):
     indices = labels.new_tensor(list(range(scores.shape[0])))
     nms_scores[indices, labels] = scores
     return cam_boxes3d, nms_scores, labels
+
+
+if __name__ == '__main__':
+    nusc_obj = NuScenesMonoDataset_copy1()
+    nusc_obj.evaluate("/content/results_nusc_4.json")

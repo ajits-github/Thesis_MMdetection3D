@@ -65,6 +65,9 @@ class DetectionEval:
         self.cfg = config
         # global nusc_obj
         # nusc_obj = nusc
+        # self.result_new = dict()
+        # print("......self.cfg.dist_ths..........", self.cfg.dist_ths)
+        # exit()
 
         # Check result file exists.
         assert os.path.exists(result_path), 'Error: The result file does not exist!'
@@ -79,12 +82,15 @@ class DetectionEval:
             os.makedirs(self.plot_dir)
 
         # Load data.
-        if verbose:
-            print('Initializing nuScenes detection evaluation')
+        # if verbose:
+        print('Initializing nuScenes detection evaluation')
+        # print("...............self.eval_set..................", self.eval_set)
         self.pred_boxes, self.meta = load_prediction(self.result_path, self.cfg.max_boxes_per_sample, DetectionBox,
                                                      verbose=verbose)
         self.gt_boxes = load_gt(self.nusc, self.eval_set, DetectionBox, verbose=verbose)
 
+        # print(".........set(self.pred_boxes.sample_tokens).....in eval.detection.evaluate.py.......", len(set(self.pred_boxes.sample_tokens)))
+        # print(".........set(self.gt_boxes.sample_tokens)......in eval.detection.evaluate.py......", len(set(self.gt_boxes.sample_tokens)))
         assert set(self.pred_boxes.sample_tokens) == set(self.gt_boxes.sample_tokens), \
             "Samples in split doesn't match samples in predictions."
 
@@ -92,13 +98,20 @@ class DetectionEval:
         self.pred_boxes = add_center_dist(nusc, self.pred_boxes)
         self.gt_boxes = add_center_dist(nusc, self.gt_boxes)
 
+        # print(".....self.pred_boxes........", self.pred_boxes[0])
+        # print(".....self.gt_boxes........", self.gt_boxes[0])
+
         # Filter boxes (distance, points per box, etc.).
-        if verbose:
-            print('Filtering predictions')
+        # if verbose:
+        print('Filtering predictions')
         self.pred_boxes = filter_eval_boxes(nusc, self.pred_boxes, self.cfg.class_range, verbose=verbose)
-        if verbose:
-            print('Filtering ground truth annotations')
+        # if verbose:
+        print('Filtering ground truth annotations')
         self.gt_boxes = filter_eval_boxes(nusc, self.gt_boxes, self.cfg.class_range, verbose=verbose)
+
+        # for box in self.pred_boxes.all:
+        #     print("...............box..pred.box.all.............", box)
+        #     exit()
 
         self.sample_tokens = self.gt_boxes.sample_tokens
 
@@ -112,6 +125,8 @@ class DetectionEval:
         # -----------------------------------
         # Step 1: Accumulate metric data for all classes and distance thresholds.
         # -----------------------------------
+        # self.result_dict = self.
+
         if self.verbose:
             print('Accumulating metric data...')
         metric_data_list = DetectionMetricDataList()
@@ -135,8 +150,8 @@ class DetectionEval:
         # -----------------------------------
         # Step 2: Calculate metrics from the data.
         # -----------------------------------
-        if self.verbose:
-            print('Calculating metrics...')
+        # if self.verbose:
+        print('Calculating metrics...')
         metrics = DetectionMetrics(self.cfg)
         for class_name in self.cfg.class_names:
             # Compute APs.
@@ -167,8 +182,8 @@ class DetectionEval:
         :param metrics: DetectionMetrics instance.
         :param md_list: DetectionMetricDataList instance.
         """
-        if self.verbose:
-            print('Rendering PR and TP curves')
+        # if self.verbose:
+        print('Rendering PR and TP curves')
 
         def savepath(name):
             return os.path.join(self.plot_dir, name + '.pdf')
@@ -224,8 +239,8 @@ class DetectionEval:
             self.render(metrics, metric_data_list)
 
         # Dump the metric data, meta and metrics to disk.
-        if self.verbose:
-            print('Saving metrics to: %s' % self.output_dir)
+        # if self.verbose:
+        print('Saving metrics to: %s' % self.output_dir)
         metrics_summary = metrics.serialize()
         metrics_summary['meta'] = self.meta.copy()
         with open(os.path.join(self.output_dir, 'metrics_summary.json'), 'w') as f:
@@ -241,7 +256,10 @@ class DetectionEval:
             'orient_err': 'mAOE',
             'vel_err': 'mAVE',
             'attr_err': 'mAAE',
-            'ttc_err':'mATT'    # New ##
+            'ttc_err_pred':'mATTP',   # New ##
+            'ttc_err_calc':'mATTC',    # New ##
+            'mid_err_pred':'mAMiP',    # New ##
+            'mid_err_calc':'mAMiC'    # New ##
         }
         for tp_name, tp_val in metrics_summary['tp_errors'].items():
             print('%s: %.4f' % (err_name_mapping[tp_name], tp_val))
@@ -252,19 +270,22 @@ class DetectionEval:
         print()
         print('Per-class results:')
         # print('Object Class\tAP\tATE\tASE\tAOE\tAVE\tAAE') 
-        print('Object Class\tAP\tATE\tASE\tAOE\tAVE\tAAE\tATT') # New ##
+        print('Object Class\tAP\tATE\tASE\tAOE\tAVE\tAAE\tATTP\tATTC\tAMiP\tAMiC') # New ##
         class_aps = metrics_summary['mean_dist_aps']
         class_tps = metrics_summary['label_tp_errors']
         for class_name in class_aps.keys():
             # print('%s\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f'
-            print('%s\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f'    # New ##
+            print('%s\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.4f\t%.4f\t%.4f\t%.4f'    # New ##
                   % (class_name, class_aps[class_name],
                      class_tps[class_name]['trans_err'],
                      class_tps[class_name]['scale_err'],
                      class_tps[class_name]['orient_err'],
                      class_tps[class_name]['vel_err'],
                      class_tps[class_name]['attr_err'],
-                     class_tps[class_name]['ttc_err'])) # New ##
+                     class_tps[class_name]['ttc_err_pred'], # New ##
+                     class_tps[class_name]['ttc_err_calc'], # New ##
+                     class_tps[class_name]['mid_err_pred'], # New ##
+                     class_tps[class_name]['mid_err_calc'])) # New ##
 
         return metrics_summary
 

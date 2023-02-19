@@ -7,8 +7,10 @@ from .kitti_dataset import KittiDataset
 from .kitti_mono_dataset import KittiMonoDataset
 from .lyft_dataset import LyftDataset
 from .nuscenes_dataset import NuScenesDataset
-from .nuscenes_mono_dataset import NuScenesMonoDataset
-from .nuscenes_mono_dataset_copy import NuScenesMonoDataset_copy
+# from .nuscenes_mono_dataset import NuScenesMonoDataset
+from .nuscenes_mono_dataset_original import NuScenesMonoDataset
+# from .nuscenes_mono_dataset_copy import NuScenesMonoDataset_copy
+from .nuscenes_mono_dataset_copy1 import NuScenesMonoDataset_copy1
 # yapf: disable
 from .pipelines import (AffineResize, BackgroundPointsFilter, GlobalAlignment,
                         GlobalRotScaleTrans, IndoorPatchPointSample,
@@ -44,5 +46,5 @@ __all__ = [
     'VoxelBasedPointSampler', 'get_loading_pipeline', 'RandomDropPointsColor',
     'RandomJitterPoints', 'ObjectNameFilter', 'AffineResize',
     'RandomShiftScale', 'LoadPointsFromDict', 'PIPELINES',
-    'RangeLimitedRandomCrop', 'RandomRotate', 'MultiViewWrapper', NuScenesMonoDataset_copy
+    'RangeLimitedRandomCrop', 'RandomRotate', 'MultiViewWrapper', 'NuScenesMonoDataset_copy1'
 ]

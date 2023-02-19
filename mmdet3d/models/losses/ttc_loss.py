@@ -205,10 +205,10 @@ class TTCLoss(nn.Module):
         self.time_interval = time_interval
         self.scale = scale # the clamping value
 
-    def forward(self, initial_preds, initial_targets, avg_factor=None):
+    def forward(self, initial_preds, initial_targets, avg_factor=1.0):
         # print("................pred.size........",initial_preds.size())
         # print("................target.size........",initial_targets.size())
-        # print("................pred........",pred)
+        # print("................initial_preds........",initial_preds)
         # print("................target........",target)
         assert initial_preds.size() == initial_targets.size()
 
@@ -237,9 +237,13 @@ class TTCLoss(nn.Module):
         
         mid_loss = torch.abs(log_preds - log_targets)
         # print('.........mid_loss..before....',mid_loss)
+        # exit()
 
-        eps = torch.finfo(torch.float32).eps
-        mid_loss = mid_loss.sum() / (avg_factor + eps)
+        # eps = torch.finfo(torch.float32).eps
+        # mid_loss = mid_loss.sum() / (avg_factor + eps)
+        mid_loss = mid_loss.sum() / avg_factor
+        # print('.........mid_loss.sum.....',mid_loss)
+
         
         # mid_loss = mid_loss * 10**4
         # print('.........mid_loss..after....',mid_loss, '\n\n')

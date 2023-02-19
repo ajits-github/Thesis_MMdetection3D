@@ -189,7 +189,7 @@ class AnchorFreeMono3DHead(BaseMono3DDenseHead):
 
     def _init_layers(self):
         """Initialize layers of the head."""
-        print("...............Dense Heads..............")
+        # print("...............Dense Heads..............")
         # exit()
         self._init_cls_convs()
         self._init_reg_convs()

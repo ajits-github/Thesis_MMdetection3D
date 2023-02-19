@@ -5,6 +5,7 @@ from collections import defaultdict
 from typing import List, Dict, Tuple
 
 import numpy as np
+import math
 
 from nuscenes.eval.common.data_classes import MetricData, EvalBox
 from nuscenes.eval.common.utils import center_distance
@@ -92,7 +93,10 @@ class DetectionMetricData(MetricData):
                  scale_err: np.array,
                  orient_err: np.array,
                  attr_err: np.array,
-                 ttc_err: np.array): # New ##
+                 ttc_err_pred: np.array,    # New ##
+                 ttc_err_calc: np.array, # New ##
+                 mid_err_pred: np.array, # New ##
+                 mid_err_calc: np.array): # New ##
 
         # Assert lengths.
         assert len(recall) == self.nelem
@@ -103,7 +107,10 @@ class DetectionMetricData(MetricData):
         assert len(scale_err) == self.nelem
         assert len(orient_err) == self.nelem
         assert len(attr_err) == self.nelem
-        assert len(ttc_err) == self.nelem # New ##
+        assert len(ttc_err_pred) == self.nelem # New ##
+        assert len(ttc_err_calc) == self.nelem # New ##
+        assert len(mid_err_pred) == self.nelem # New ##
+        assert len(mid_err_calc) == self.nelem # New ##
 
         # Assert ordering.
         assert all(confidence == sorted(confidence, reverse=True))  # Confidences should be descending.
@@ -118,7 +125,10 @@ class DetectionMetricData(MetricData):
         self.scale_err = scale_err
         self.orient_err = orient_err
         self.attr_err = attr_err
-        self.ttc_err = ttc_err # New ##
+        self.ttc_err_pred = ttc_err_pred # New ##
+        self.ttc_err_calc = ttc_err_calc # New ##
+        self.mid_err_pred = mid_err_pred # New ##
+        self.mid_err_calc = mid_err_calc # New ##
 
     def __eq__(self, other):
         eq = True
@@ -156,7 +166,10 @@ class DetectionMetricData(MetricData):
             'scale_err': self.scale_err.tolist(),
             'orient_err': self.orient_err.tolist(),
             'attr_err': self.attr_err.tolist(),
-            'ttc_err': self.ttc_err.tolist(), # New ##
+            'ttc_err_pred': self.ttc_err_pred.tolist(), # New ##
+            'ttc_err_calc': self.ttc_err_calc.tolist(), # New ##
+            'mid_err_pred': self.mid_err_pred.tolist(), # New ##
+            'mid_err_calc': self.mid_err_calc.tolist(), # New ##
         }
 
     @classmethod
@@ -170,7 +183,10 @@ class DetectionMetricData(MetricData):
                    scale_err=np.array(content['scale_err']),
                    orient_err=np.array(content['orient_err']),
                    attr_err=np.array(content['attr_err']),
-                   ttc_err=np.array(content['ttc_err'])) # New ##
+                   ttc_err_pred=np.array(content['ttc_err_pred']), # New ##
+                   ttc_err_calc=np.array(content['ttc_err_calc']), # New ##
+                   mid_err_pred=np.array(content['mid_err_pred']), # New ##
+                   mid_err_calc=np.array(content['mid_err_calc'])) # New ##
 
     @classmethod
     def no_predictions(cls):
@@ -183,7 +199,10 @@ class DetectionMetricData(MetricData):
                    scale_err=np.ones(cls.nelem),
                    orient_err=np.ones(cls.nelem),
                    attr_err=np.ones(cls.nelem),
-                   ttc_err=np.ones(cls.nelem)) # New ##
+                   ttc_err_pred=np.ones(cls.nelem), # New ##
+                   ttc_err_calc=np.ones(cls.nelem), # New ##
+                   mid_err_pred=np.ones(cls.nelem), # New ##
+                   mid_err_calc=np.ones(cls.nelem)) # New ##
 
     @classmethod
     def random_md(cls):
@@ -196,7 +215,10 @@ class DetectionMetricData(MetricData):
                    scale_err=np.random.random(cls.nelem),
                    orient_err=np.random.random(cls.nelem),
                    attr_err=np.random.random(cls.nelem),
-                   ttc_err=np.random.random(cls.nelem)) # New ##
+                   ttc_err_pred=np.random.random(cls.nelem), # New ##
+                   ttc_err_calc=np.random.random(cls.nelem), # New ##
+                   mid_err_pred=np.random.random(cls.nelem), # New ##
+                   mid_err_calc=np.random.random(cls.nelem)) # New ##
 
 
 class DetectionMetrics:
@@ -332,9 +354,18 @@ class DetectionBox(EvalBox):
                  num_pts: int = -1,  # Nbr. LIDAR or RADAR inside the box. Only for gt boxes.
                  detection_name: str = 'car',  # The class name used in the detection challenge.
                  detection_score: float = -1.0,  # GT samples do not have a score.
-                 attribute_name: str = ''):  # Box attribute. Each box can have at most 1 attribute.
+                 attribute_name: str = '',  # Box attribute. Each box can have at most 1 attribute.
+                 time_to_coll_pred: float = 0.0,
+                 time_to_coll_calc: float = 0.0,
+                 sample_data_token: str = "",
+                 sample_annotation_token: str = ""):
+                 
 
-        super().__init__(sample_token, translation, size, rotation, velocity, ego_translation, num_pts)
+        super().__init__(sample_token, translation, size, rotation, velocity, ego_translation, num_pts, \
+                time_to_coll_pred=time_to_coll_pred, 
+                time_to_coll_calc=time_to_coll_calc, 
+                sample_data_token=sample_data_token,
+                sample_annotation_token=sample_annotation_token)
 
         assert detection_name is not None, 'Error: detection_name cannot be empty!'
         assert detection_name in DETECTION_NAMES, 'Error: Unknown detection_name %s' % detection_name
@@ -345,10 +376,14 @@ class DetectionBox(EvalBox):
         assert type(detection_score) == float, 'Error: detection_score must be a float!'
         assert not np.any(np.isnan(detection_score)), 'Error: detection_score may not be NaN!'
 
+        
+
         # Assign.
         self.detection_name = detection_name
         self.detection_score = detection_score
         self.attribute_name = attribute_name
+        # self.time_to_coll_pred = time_to_coll_pred
+        # self.time_to_coll_calc = time_to_coll_calc
 
     def __eq__(self, other):
         return (self.sample_token == other.sample_token and
@@ -360,10 +395,14 @@ class DetectionBox(EvalBox):
                 self.num_pts == other.num_pts and
                 self.detection_name == other.detection_name and
                 self.detection_score == other.detection_score and
-                self.attribute_name == other.attribute_name)
+                self.attribute_name == other.attribute_name and
+                self.time_to_coll_pred == other.time_to_coll_pred and
+                self.time_to_coll_calc == other.time_to_coll_calc and
+                self.sample_data_token == other.sample_data_token)
 
     def serialize(self) -> dict:
         """ Serialize instance into json-friendly format. """
+        # print("............AM I Here..............")
         return {
             'sample_token': self.sample_token,
             'translation': self.translation,
@@ -374,7 +413,11 @@ class DetectionBox(EvalBox):
             'num_pts': self.num_pts,
             'detection_name': self.detection_name,
             'detection_score': self.detection_score,
-            'attribute_name': self.attribute_name
+            'attribute_name': self.attribute_name,
+            'time_to_coll_pred': self.time_to_coll_pred,
+            'time_to_coll_calc': self.time_to_coll_calc,
+            'sample_data_token': self.sample_data_token,
+            'sample_annotation_token': self.sample_annotation_token
         }
 
     @classmethod
@@ -385,12 +428,15 @@ class DetectionBox(EvalBox):
                    size=tuple(content['size']),
                    rotation=tuple(content['rotation']),
                    velocity=tuple(content['velocity']),
-                   ego_translation=(0.0, 0.0, 0.0) if 'ego_translation' not in content
-                   else tuple(content['ego_translation']),
+                   ego_translation=(0.0, 0.0, 0.0) if 'ego_translation' not in content else tuple(content['ego_translation']),
                    num_pts=-1 if 'num_pts' not in content else int(content['num_pts']),
                    detection_name=content['detection_name'],
                    detection_score=-1.0 if 'detection_score' not in content else float(content['detection_score']),
-                   attribute_name=content['attribute_name'])
+                   attribute_name=content['attribute_name'],
+                   time_to_coll_pred=float(content['time_to_coll_pred']),
+                   time_to_coll_calc=0.0 if math.isnan(float(content['time_to_coll_calc'])) else float(content['time_to_coll_calc']),
+                   sample_data_token=content['sample_data_token'],
+                   sample_annotation_token="" if 'sample_annotation_token' not in content else content['sample_annotation_token'])
 
 
 class DetectionMetricDataList:

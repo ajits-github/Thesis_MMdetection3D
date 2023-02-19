@@ -127,25 +127,38 @@ class SingleStageMono3DDetector(SingleStageDetector):
                 The outer list corresponds to each image. The inner list
                 corresponds to each class.
         """
+        # print("........img........",img)
+        # print("........img_metas...............",img_metas)
+        
         x = self.extract_feat(img)
         outs = self.bbox_head(x)
-        # print("..........outs........", outs)
+        # print("..........outs[0]........\n", outs[0])
+        # print("..........outs[0][0]........\n", outs[0][0])
+        # print("..........outs.len.......\n", len(outs))
+        # print("..........outs[0].size.......\n", outs[0].size())
         # exit()
         bbox_outputs = self.bbox_head.get_bboxes(
             *outs, img_metas, rescale=rescale)
+        
+        # print(".........bbox_outputs...........",bbox_outputs)
+        # print(".........bbox_outputs[0]..........",bbox_outputs[0])
 
         if self.bbox_head.pred_bbox2d:
             from mmdet.core import bbox2result
             bbox2d_img = [
                 bbox2result(bboxes2d, labels, self.bbox_head.num_classes)
-                for bboxes, scores, labels, attrs, bboxes2d in bbox_outputs
+                for bboxes, scores, labels, attrs, bboxes2d, ttc in bbox_outputs
             ]
             bbox_outputs = [bbox_outputs[0][:-1]]
+            # print(".......................pred_bbox2d.........")
+
 
         bbox_img = [
-            bbox3d2result(bboxes, scores, labels, attrs)
-            for bboxes, scores, labels, attrs in bbox_outputs
+            bbox3d2result(bboxes, scores, labels, attrs, ttc)
+            for bboxes, scores, labels, attrs, ttc in bbox_outputs
         ]
+
+        # print(".........bbox_img.............", bbox_img)
 
         bbox_list = [dict() for i in range(len(img_metas))]
         for result_dict, img_bbox in zip(bbox_list, bbox_img):
@@ -153,6 +166,7 @@ class SingleStageMono3DDetector(SingleStageDetector):
         if self.bbox_head.pred_bbox2d:
             for result_dict, img_bbox2d in zip(bbox_list, bbox2d_img):
                 result_dict['img_bbox2d'] = img_bbox2d
+        # bbox_list = []
         return bbox_list
 
     def aug_test(self, imgs, img_metas, rescale=False):

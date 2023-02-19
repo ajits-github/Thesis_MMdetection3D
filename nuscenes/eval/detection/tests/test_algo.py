@@ -155,6 +155,10 @@ def get_metric_data(gts: Dict[str, List[Dict]],
         :param dist_th: Distance threshold for matching.
         """
 
+        print(".............get_metric_data..gts.......",  list(gts.keys())[0])
+        print(".............get_metric_data..preds.......",  list(preds.keys())[0])
+        # exit()
+
         # Some or all of the defaults will be replaced by if given.
         defaults = {'trans': (0, 0, 0), 'size': (1, 1, 1), 'rot': (0, 0, 0, 0),
                     'vel': (0, 0), 'attr': 'vehicle.parked', 'score': -1.0, 'name': 'car'}

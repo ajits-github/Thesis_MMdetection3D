@@ -31,6 +31,8 @@ def main():
     model = init_model(args.config, args.checkpoint, device=args.device)
     # test a single image
     result, data = inference_mono_3d_detector(model, args.image, args.ann)
+    print("...result.........", result)
+    print("\n\n\n...data.........", data)
     # show the results
     show_result_meshlab(
         data,

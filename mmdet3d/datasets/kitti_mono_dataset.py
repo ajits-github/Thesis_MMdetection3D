@@ -10,7 +10,8 @@ from mmcv.utils import print_log
 
 from ..core.bbox import Box3DMode, CameraInstance3DBoxes, points_cam2img
 from .builder import DATASETS
-from .nuscenes_mono_dataset import NuScenesMonoDataset
+# from .nuscenes_mono_dataset import NuScenesMonoDataset
+from .nuscenes_mono_dataset_original import NuScenesMonoDataset
 
 
 @DATASETS.register_module()
