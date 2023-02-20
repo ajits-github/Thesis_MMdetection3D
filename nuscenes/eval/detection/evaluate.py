@@ -151,6 +151,7 @@ class DetectionEval:
         # Step 2: Calculate metrics from the data.
         # -----------------------------------
         # if self.verbose:
+        # print("..........metric_data_list.....in eval.detection.evaluate.py.......", metric_data_list)
         print('Calculating metrics...')
         metrics = DetectionMetrics(self.cfg)
         for class_name in self.cfg.class_names:
@@ -233,6 +234,8 @@ class DetectionEval:
 
         # Run evaluation.
         metrics, metric_data_list = self.evaluate()
+        # print("\n............metrics.............", metrics)
+        # print("\n............metric_data_list.............", metric_data_list)
 
         # Render PR and TP curves.
         if render_curves:

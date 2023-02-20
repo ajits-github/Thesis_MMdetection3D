@@ -4,7 +4,7 @@
 from typing import Callable
 
 import numpy as np
-
+import math
 from nuscenes import NuScenes
 from nuscenes.eval.common.data_classes import EvalBoxes
 from nuscenes.eval.common.utils import center_distance, scale_iou, yaw_diff, \
@@ -77,6 +77,9 @@ def accumulate(nusc: NuScenes, gt_boxes: EvalBoxes,
                   'mid_err_pred': [],
                   'mid_err_calc': [],}
 
+    match_data_ttc = {'conf_ttc': [],
+                      'conf_mid': []}
+
     # ---------------------------------------------
     # Match and accumulate match data.
     # ---------------------------------------------
@@ -119,17 +122,22 @@ def accumulate(nusc: NuScenes, gt_boxes: EvalBoxes,
             match_data['orient_err'].append(yaw_diff(gt_box_match, pred_box, period=period))
 
             # New
-            match_data['ttc_err_pred'].append(l1_distance_pred(gt_box_match, pred_box))
-            match_data['ttc_err_calc'].append(l1_distance_calc(gt_box_match, pred_box))
-            match_data['mid_err_pred'].append(mid_loss_pred(gt_box_match, pred_box))
-            match_data['mid_err_calc'].append(mid_loss_calc(gt_box_match, pred_box))
+            if  (0.0 <= gt_box_match.time_to_coll_calc <= 10.0) and not math.isnan(gt_box_match.time_to_coll_calc):
+                match_data['ttc_err_pred'].append(l1_distance_pred(gt_box_match, pred_box))
+                match_data['ttc_err_calc'].append(l1_distance_calc(gt_box_match, pred_box))
+                match_data_ttc['conf_ttc'].append(pred_box.detection_score)
+            if (-10.0 <= gt_box_match.time_to_coll_calc <= 10.0) and not math.isnan(gt_box_match.time_to_coll_calc):
+                match_data['mid_err_pred'].append(mid_loss_pred(gt_box_match, pred_box))
+                match_data['mid_err_calc'].append(mid_loss_calc(gt_box_match, pred_box))
+                match_data_ttc['conf_mid'].append(pred_box.detection_score)
             # print(".......HELLLLLLLLOOOOOOOOOO................\n")
             # exit()
             ## New
 
             match_data['attr_err'].append(1 - attr_acc(gt_box_match, pred_box))
             match_data['conf'].append(pred_box.detection_score)
-
+            
+            
         else:
             # No match. Mark this as a false positive.
             tp.append(0)
@@ -137,8 +145,13 @@ def accumulate(nusc: NuScenes, gt_boxes: EvalBoxes,
             conf.append(pred_box.detection_score)
 
     # Check if we have any matches. If not, just return a "no predictions" array.
-    if len(match_data['trans_err']) == 0:
+    # if len(match_data['trans_err']) == 0:
+    #     return DetectionMetricData.no_predictions()
+    
+    # For some classes, these are zero so handle them
+    if len(match_data['ttc_err_pred']) == 0:
         return DetectionMetricData.no_predictions()
+    
 
     # ---------------------------------------------
     # Calculate and interpolate precision and recall
@@ -162,16 +175,33 @@ def accumulate(nusc: NuScenes, gt_boxes: EvalBoxes,
     # Re-sample the match-data to match, prec, recall and conf.
     # ---------------------------------------------
 
+    # print("...............match_data[ttc_err_pred].........", len(match_data['ttc_err_pred']))
+    # print("...............match_data[ttc_err_calc].........", len(match_data['ttc_err_calc']))
+    # print("...............match_data[mid_err_pred].........", len(match_data['mid_err_pred']))
+    # print("...............match_data[mid_err_calc].........", len(match_data['mid_err_calc']))
+    # print("...............match_data['conf'].len........", len(match_data['conf']))
+    # print("...............match_data['conf'].........", match_data['conf'])
+
     for key in match_data.keys():
         if key == "conf":
             continue  # Confidence is used as reference to align with fp and tp. So skip in this step.
-
+        
+        # elif key in ["ttc_err_pred", "ttc_err_calc"]:
+        #     tmp = cummean(np.array(match_data[key]))
+        #     match_data[key] = np.interp(conf[::-1], match_data_ttc['conf_ttc'][::-1], tmp[::-1])[::-1]
+        # elif key in ["mid_err_pred", "mid_err_calc"]:
+        #     tmp = cummean(np.array(match_data[key]))
+        #     match_data[key] = np.interp(conf[::-1], match_data_ttc['conf_mid'][::-1], tmp[::-1])[::-1]
         else:
             # For each match_data, we first calculate the accumulated mean.
             tmp = cummean(np.array(match_data[key]))
 
-            # Then interpolate based on the confidences. (Note reversing since np.interp needs increasing arrays)
-            match_data[key] = np.interp(conf[::-1], match_data['conf'][::-1], tmp[::-1])[::-1]
+            if key in ["ttc_err_pred", "ttc_err_calc", "mid_err_pred", "mid_err_calc"]:
+                # if len(match_data[key]) != 0:
+                    match_data[key] = np.interp(conf[::-1], match_data_ttc[f'conf_{key.split("_")[0]}'][::-1], tmp[::-1])[::-1]
+            else:
+                # Then interpolate based on the confidences. (Note reversing since np.interp needs increasing arrays)
+                match_data[key] = np.interp(conf[::-1], match_data['conf'][::-1], tmp[::-1])[::-1]
 
     # ---------------------------------------------
     # Done. Instantiate MetricData and return

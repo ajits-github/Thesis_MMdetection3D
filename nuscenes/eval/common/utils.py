@@ -208,6 +208,7 @@ def l1_distance_pred(gt_box: EvalBox, pred_box: EvalBox) -> float:
     # ttc_pred_error = abs(gt_box.time_to_coll_calc) - abs(pred_box.time_to_coll_pred)
     # ttc_calc_error = abs(gt_box.time_to_coll_calc) - abs(pred_box.time_to_coll_calc)
     # print("...........ttc_pred_error.............", ttc_pred_error)
+    # exit()
     return ttc_pred_error
 
 def l1_distance_calc(gt_box: EvalBox, pred_box: EvalBox) -> float:
@@ -228,6 +229,7 @@ def mid_loss_pred(gt_box: EvalBox, pred_box: EvalBox) -> float:
     # print("...........gt_box.time_to_coll_calc.......1......", gt_box.time_to_coll_calc)
     mid_loss_pred = ttc_loss(torch.tensor([pred_box.time_to_coll_pred]), torch.tensor([gt_box.time_to_coll_calc]))
     mid_loss_pred = mid_loss_pred.cpu().detach().numpy()
+    # print("...........mid_loss_pred........1.....", mid_loss_pred)
     return mid_loss_pred
 
 def mid_loss_calc(gt_box: EvalBox, pred_box: EvalBox) -> float:
@@ -236,6 +238,7 @@ def mid_loss_calc(gt_box: EvalBox, pred_box: EvalBox) -> float:
     # print("...........gt_box.time_to_coll_calc........2.....", gt_box.time_to_coll_calc)
     mid_loss_calc = ttc_loss(torch.tensor([pred_box.time_to_coll_calc]), torch.tensor([gt_box.time_to_coll_calc]))
     mid_loss_calc = mid_loss_calc.cpu().detach().numpy()
+    # print("...........mid_loss_calc........2.....", mid_loss_calc)
     return mid_loss_calc
 
 ## New 

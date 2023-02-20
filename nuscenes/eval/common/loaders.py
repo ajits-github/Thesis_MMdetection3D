@@ -58,6 +58,182 @@ def load_prediction(result_path: str, max_boxes_per_sample: int, box_cls, verbos
     return all_results, meta
 
 
+# def load_gt(nusc: NuScenes, eval_split: str, box_cls, verbose: bool = False) -> EvalBoxes:
+#     """
+#     Loads ground truth boxes from DB.
+#     :param nusc: A NuScenes instance.
+#     :param eval_split: The evaluation split for which we load GT boxes.
+#     :param box_cls: Type of box to load, e.g. DetectionBox or TrackingBox.
+#     :param verbose: Whether to print messages to stdout.
+#     :return: The GT boxes.
+#     """
+#     # Init.
+#     if box_cls == DetectionBox:
+#         attribute_map = {a['token']: a['name'] for a in nusc.attribute}
+
+#     if verbose:
+#         print('Loading annotations for {} split from nuScenes version: {}'.format(eval_split, nusc.version))
+#     # Read out all sample_tokens in DB.
+#     sample_tokens_all = [s['token'] for s in nusc.sample]
+#     assert len(sample_tokens_all) > 0, "Error: Database has no samples!"
+
+#     # Only keep samples from this split.
+#     splits = create_splits_scenes()
+
+#     # Check compatibility of split with nusc_version.
+#     version = nusc.version
+#     if eval_split in {'train', 'val', 'train_detect', 'train_track'}:
+#         assert version.endswith('trainval'), \
+#             'Error: Requested split {} which is not compatible with NuScenes version {}'.format(eval_split, version)
+#     elif eval_split in {'mini_train', 'mini_val'}:
+#         assert version.endswith('mini'), \
+#             'Error: Requested split {} which is not compatible with NuScenes version {}'.format(eval_split, version)
+#     elif eval_split == 'test':
+#         assert version.endswith('test'), \
+#             'Error: Requested split {} which is not compatible with NuScenes version {}'.format(eval_split, version)
+#     else:
+#         raise ValueError('Error: Requested split {} which this function cannot map to the correct NuScenes version.'
+#                          .format(eval_split))
+
+#     if eval_split == 'test':
+#         # Check that you aren't trying to cheat :).
+#         assert len(nusc.sample_annotation) > 0, \
+#             'Error: You are trying to evaluate on the test set but you do not have the annotations!'
+
+#     sample_tokens = []
+#     for sample_token in sample_tokens_all:
+#         scene_token = nusc.get('sample', sample_token)['scene_token']
+#         scene_record = nusc.get('scene', scene_token)
+#         if scene_record['name'] in splits[eval_split]:
+#             sample_tokens.append(sample_token)
+
+#     all_annotations = EvalBoxes()
+
+#     # Load annotations and filter predictions and annotations.
+#     tracking_id_set = set()
+#     for sample_token in tqdm.tqdm(sample_tokens, leave=verbose):
+
+#         sample = nusc.get('sample', sample_token)
+#         sample_annotation_tokens = sample['anns']
+
+#         sample_boxes = []
+
+#         # New
+#         ego_velo = ego_velocity(nusc, sample_token)
+#         sample_rec = nusc.get('sample', sample_token)
+#         sd_record = nusc.get('sample_data', sample_rec['data']['LIDAR_TOP'])
+#         pose_record = nusc.get('ego_pose', sd_record['ego_pose_token'])
+#         # sample_data_token = sd_record['token']
+#         # print("............sd_record...........", sd_record)
+#         ## New
+
+#         for sample_annotation_token in sample_annotation_tokens:
+
+#             # print("..............sample_token.........", sample)
+#             sample_annotation = nusc.get('sample_annotation', sample_annotation_token)
+#             sample_data_token = get_sample_data_token(nusc, sample_annotation_token)
+#             # nusc.render_annotation(sample_annotation_token)
+#             # print(".....................",nusc.get('sample_data', "4f5e35aa6c6a426ca945e206fb2f4921"))
+#             # exit()
+
+#             # get gt ttcs
+#             # New
+#             translation = sample_annotation['translation']
+#             velocity = nusc.box_velocity(sample_annotation['token'])[:2]
+#             ego_obj_distance = (translation[0] - pose_record['translation'][0],
+#                             translation[1] - pose_record['translation'][1],
+#                             translation[2] - pose_record['translation'][2])
+#             ego_obj_distance_norm = np.linalg.norm(np.array(ego_obj_distance))
+#             ego_obj_distance_unitvec = ego_obj_distance / ego_obj_distance_norm
+#             relative_velocity = (velocity[0] - ego_velo[0],
+#                             velocity[1] - ego_velo[1])
+#             relative_velocity_egocomponent = np.dot(relative_velocity, 
+#                             ego_obj_distance_unitvec[:2]).astype(float)
+#             ttc_calculated = - ego_obj_distance_norm / relative_velocity_egocomponent
+#             if math.isnan(ttc_calculated):
+#                 ttc_calculated = 0.0
+#             # print("..............sample_token.........", sample_token)
+#             # print("..............sample_data_token.........", sd_record['token'])
+#             # print("..............sample_annotation_token.........", sample_annotation_token)
+#             # print("..............ttc_calculated.........", ttc_calculated)
+#             # print("..............sample_annotation.........", sample_annotation)
+#             # exit()
+#             ## New
+
+#             if box_cls == DetectionBox:
+#                 # Get label name in detection task and filter unused labels.
+#                 detection_name = category_to_detection_name(sample_annotation['category_name'])
+#                 if detection_name is None:
+#                     continue
+                
+#                 # Get attribute_name.
+#                 attr_tokens = sample_annotation['attribute_tokens']
+#                 attr_count = len(attr_tokens)
+#                 if attr_count == 0:
+#                     attribute_name = ''
+#                 elif attr_count == 1:
+#                     attribute_name = attribute_map[attr_tokens[0]]
+#                 else:
+#                     raise Exception('Error: GT annotations must not have more than one attribute!')
+
+#                 sample_boxes.append(
+#                     box_cls(
+#                         sample_token=sample_token,
+#                         sample_data_token=sample_data_token,
+#                         sample_annotation_token=sample_annotation_token,
+#                         # translation=sample_annotation['translation'],
+#                         translation=translation,
+#                         size=sample_annotation['size'],
+#                         rotation=sample_annotation['rotation'],
+#                         # velocity=nusc.box_velocity(sample_annotation['token'])[:2],
+#                         velocity=velocity,
+#                         num_pts=sample_annotation['num_lidar_pts'] + sample_annotation['num_radar_pts'],
+#                         detection_name=detection_name,
+#                         detection_score=-1.0,  # GT samples do not have a score.
+#                         attribute_name=attribute_name,
+#                         time_to_coll_calc=ttc_calculated,
+#                     )
+#                 )
+#             elif box_cls == TrackingBox:
+#                 # Use nuScenes token as tracking id.
+#                 tracking_id = sample_annotation['instance_token']
+#                 tracking_id_set.add(tracking_id)
+
+#                 # Get label name in detection task and filter unused labels.
+#                 # Import locally to avoid errors when motmetrics package is not installed.
+#                 from nuscenes.eval.tracking.utils import category_to_tracking_name
+#                 tracking_name = category_to_tracking_name(sample_annotation['category_name'])
+#                 if tracking_name is None:
+#                     continue
+
+#                 sample_boxes.append(
+#                     box_cls(
+#                         sample_token=sample_token,
+#                         sample_data_token=sample_data_token,
+#                         sample_annotation_token=sample_annotation_token,
+#                         # translation=sample_annotation['translation'],
+#                         translation=translation,
+#                         size=sample_annotation['size'],
+#                         rotation=sample_annotation['rotation'],
+#                         # velocity=nusc.box_velocity(sample_annotation['token'])[:2],
+#                         velocity=velocity,
+#                         num_pts=sample_annotation['num_lidar_pts'] + sample_annotation['num_radar_pts'],
+#                         tracking_id=tracking_id,
+#                         tracking_name=tracking_name,
+#                         tracking_score=-1.0,  # GT samples do not have a score.
+#                         time_to_coll_calc=ttc_calculated,
+#                     )
+#                 )
+#             else:
+#                 raise NotImplementedError('Error: Invalid box_cls %s!' % box_cls)
+
+#         all_annotations.add_boxes(sample_token, sample_boxes)
+
+#     # if verbose:
+#     print("Loaded ground truth annotations for {} samples.".format(len(all_annotations.sample_tokens)))
+
+#     return all_annotations
+
 def load_gt(nusc: NuScenes, eval_split: str, box_cls, verbose: bool = False) -> EvalBoxes:
     """
     Loads ground truth boxes from DB.
@@ -150,8 +326,8 @@ def load_gt(nusc: NuScenes, eval_split: str, box_cls, verbose: bool = False) -> 
             relative_velocity_egocomponent = np.dot(relative_velocity, 
                             ego_obj_distance_unitvec[:2]).astype(float)
             ttc_calculated = - ego_obj_distance_norm / relative_velocity_egocomponent
-            if math.isnan(ttc_calculated):
-                ttc_calculated = 0.0
+            # if math.isnan(ttc_calculated):
+            #     ttc_calculated = 0.0
             # print("..............sample_token.........", sample_token)
             # print("..............sample_data_token.........", sd_record['token'])
             # print("..............sample_annotation_token.........", sample_annotation_token)
@@ -233,6 +409,7 @@ def load_gt(nusc: NuScenes, eval_split: str, box_cls, verbose: bool = False) -> 
     print("Loaded ground truth annotations for {} samples.".format(len(all_annotations.sample_tokens)))
 
     return all_annotations
+
 
 # New
 from nuscenes.utils.geometry_utils import BoxVisibility
